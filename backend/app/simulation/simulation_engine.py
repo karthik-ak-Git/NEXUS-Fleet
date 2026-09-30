@@ -247,20 +247,10 @@ class SimulationEngine:
         self.network.send("SYSTEM", "*", "EDGE_CLEAR", {"edgeId": edge_id}, self.sim_time, 10.0)
         self.emit_event(None, "AISLE_CLEARED", f"Edge {edge_id} cleared.", edge_id, "Normal traffic resumed.")
 
-    def step(self, dt: float):
-        if not self.running:
-            return
-
-        self.sim_time += dt * self.speed
-        now = self.sim_time
-
-        # 1. Deliver radio messages
-        self.network.deliver(now)
-
-        # 2. Build Context
+    def context(self, agent=None, dt: float = 0.1) -> AgentContext:
         robot_states = [a.state for a in self.agents]
-        ctx = AgentContext(
-            now=now,
+        return AgentContext(
+            now=self.sim_time,
             dt=dt * self.speed,
             mode=self.mode,
             nodes=self.nodes,
@@ -280,6 +270,19 @@ class SimulationEngine:
             on_task_unassigned=self._on_task_unassigned,
             on_low_battery=self._on_low_battery
         )
+
+    def step(self, dt: float):
+        if not self.running:
+            return
+
+        self.sim_time += dt * self.speed
+        now = self.sim_time
+
+        # 1. Deliver radio messages
+        self.network.deliver(now)
+
+        # 2. Build Context
+        ctx = self.context(dt=dt)
 
         # 3. Step Agents & Collect Conflicts
         step_conflicts = []

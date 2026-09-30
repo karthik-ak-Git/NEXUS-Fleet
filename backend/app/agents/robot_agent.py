@@ -581,7 +581,9 @@ class RobotAgent:
         self.state.status = "REROUTING"
         self.route_goal = None
         context.on_low_battery(self.state.id, current_task_id, reason)
-        self.record_decision(context.now, "CHARGE", reason)
+    def set_battery(self, percent: float, context: AgentContext):
+        self.state.battery = max(1.0, min(100.0, percent))
+        self._apply_battery_policy(context)
 
     def _finish_charging(self, context: AgentContext):
         prev_task = self.charging_resume_task

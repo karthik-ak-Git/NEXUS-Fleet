@@ -115,7 +115,11 @@ def get_rack_locations() -> List[Dict[str, str]]:
     return rack_nodes
 
 PACKING_NODE = node_id(2, 8)
-CHARGER_NODES = [node_id(0, 0), node_id(5, 8)]
+COUNTER_QUEUE_NODES = [node_id(2, 8), node_id(2, 7), node_id(2, 6), node_id(2, 5)]
+CHARGER_NODES = [
+    node_id(0, 0), node_id(0, 1), node_id(0, 2), node_id(0, 3), node_id(0, 4),
+    node_id(0, 5), node_id(0, 6), node_id(0, 7), node_id(0, 8), node_id(5, 0)
+]
 
 def node_by_id(nodes: List[WarehouseNodeSchema], node_id_str: Optional[str]) -> Optional[WarehouseNodeSchema]:
     if not node_id_str:
