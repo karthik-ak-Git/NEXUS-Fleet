@@ -412,12 +412,12 @@ class RobotAgent:
             self.state.waitingFor = None
             if self.state.status in ("YIELDING", "WAITING"):
                 self.state.status = "MOVING"
-        # Physical 2D proximity safety check: yield if within 1.35m of another active robot with higher priority
+        # Physical 2D proximity safety check: yield if within 0.65m of another active robot with higher priority
         for other in context.robots:
             if other.id == self.state.id or other.health == "FAILED":
                 continue
             dist = math.hypot(self.state.x - other.x, self.state.y - other.y)
-            if dist < 1.35:
+            if dist < 0.65:
                 own_prio = self._priority_score(now)
                 other_prio = getattr(other, "taskPriority", 0.0) or 0.0
                 wins = own_prio > other_prio or (abs(own_prio - other_prio) < 0.0001 and self.state.id < other.id)
@@ -618,8 +618,12 @@ class RobotAgent:
         )
         self.route_goal = goal
         if not route:
-            self.state.status = "BLOCKED"
-            self.state.reason = f"No safe route to {goal} in local world model."
+            if self.state.currentTaskId:
+                self.state.status = "BLOCKED"
+                self.state.reason = f"No safe route to {goal} in local world model."
+            else:
+                self.state.status = "IDLE"
+                self.state.reason = "Standing by for task assignment."
             self.state.velocity = 0.0
             return
 

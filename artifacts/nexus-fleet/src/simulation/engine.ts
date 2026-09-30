@@ -35,8 +35,8 @@ interface EngineOptions {
 
 const DEFAULT_SEED = 26123;
 const EVENT_LIMIT = 240;
-const ROBOT_IDS = ["AMR-01", "AMR-02", "AMR-03", "AMR-04", "AMR-05", "AMR-06"];
-const PRIORITIES = [0.92, 0.76, 0.84, 0.64, 0.72, 0.55];
+const ROBOT_IDS = ["AMR-01", "AMR-02", "AMR-03", "AMR-04", "AMR-05", "AMR-06", "AMR-07", "AMR-08", "AMR-09", "AMR-10"];
+const PRIORITIES = [0.95, 0.88, 0.82, 0.75, 0.68, 0.62, 0.58, 0.52, 0.45, 0.40];
 
 export class SimulationEngine {
   private seed: number;
@@ -83,7 +83,7 @@ export class SimulationEngine {
     this.seed = options.seed ?? DEFAULT_SEED;
     this.randomState = this.seed;
     this.mode = options.mode ?? "distributed";
-    this.robotCount = options.robotCount ?? 6;
+    this.robotCount = options.robotCount ?? 10;
     this.taskCount = options.taskCount ?? 12;
     this.initialize("normal");
   }
@@ -123,12 +123,16 @@ export class SimulationEngine {
     this.tasks = [];
 
     const starts = [
-      nodeId(0, 3),
+      nodeId(0, 2),
+      nodeId(1, 1),
       nodeId(2, 1),
-      nodeId(4, 3),
-      nodeId(2, 5),
-      nodeId(0, 5),
+      nodeId(3, 1),
       nodeId(4, 1),
+      nodeId(5, 2),
+      nodeId(0, 6),
+      nodeId(1, 7),
+      nodeId(2, 7),
+      nodeId(4, 7),
     ];
     for (let index = 0; index < this.robotCount; index += 1) {
       const id = ROBOT_IDS[index] ?? `AMR-${String(index + 1).padStart(2, "0")}`;

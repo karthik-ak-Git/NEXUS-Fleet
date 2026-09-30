@@ -119,7 +119,33 @@ export function FleetConsole() {
   const [cameraReset, setCameraReset] = useState(0);
 
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
-  const [selectedProductIndex, setSelectedProductIndex] = useState(0);
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>(['apples', 'milk', 'bread']);
+
+  const selectedProducts = useMemo(() => {
+    return groceryProducts.filter((p) => selectedProductIds.includes(p.id));
+  }, [selectedProductIds]);
+
+  const toggleProductSelection = (id: string) => {
+    setSelectedProductIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
+    );
+  };
+
+  const selectAllProducts = () => {
+    setSelectedProductIds(groceryProducts.map((p) => p.id));
+  };
+
+  const clearProductSelection = () => {
+    setSelectedProductIds([]);
+  };
+
+  const handleDispatchBatchTasks = () => {
+    if (!selectedProducts.length) return;
+    selectedProducts.forEach((prod) => {
+      createTask(prod.pickup, prod.sku);
+    });
+    setIsTaskModalOpen(false);
+  };
 
   const data = state as unknown as Datum;
   const nodeLabels = useMemo(() => new Map(
@@ -137,33 +163,8 @@ export function FleetConsole() {
     destination: nodeLabels.get(robot.destination) ?? robot.destination,
   }));
 
-  const selectedProduct = groceryProducts[selectedProductIndex];
-  const targetNodeCoord = nodeMapForDist.get(selectedProduct.pickup) ?? { x: 0, y: 0 };
-
-  const nearestIdleRobot = useMemo(() => {
-    const idleRobots = robots.filter((r) => r.health !== 'FAILED' && (!r.taskId || r.state === 'IDLE' || r.state === 'COMPLETED'));
-    if (!idleRobots.length) return robots[0] ?? null;
-
-    let bestRobot = idleRobots[0];
-    let minDistance = Infinity;
-
-    for (const robot of idleRobots) {
-      const rx = Number(robot.x ?? 0);
-      const ry = Number(robot.y ?? 0);
-      const dist = Math.hypot(rx - targetNodeCoord.x, ry - targetNodeCoord.y);
-      if (dist < minDistance) {
-        minDistance = dist;
-        bestRobot = robot;
-      }
-    }
-
-    return { ...bestRobot, distanceMeters: minDistance.toFixed(1) };
-  }, [robots, targetNodeCoord]);
-
-  const handleDispatchTask = () => {
-    createTask(selectedProduct.pickup, selectedProduct.sku, nearestIdleRobot?.id);
-    setIsTaskModalOpen(false);
-  };
+  const firstSelectedProduct = selectedProducts[0] ?? groceryProducts[0];
+  const targetNodeCoord = nodeMapForDist.get(firstSelectedProduct.pickup) ?? { x: 0, y: 0 };
 
   const tasks: Datum[] = (Array.isArray(data?.tasks) ? data.tasks : []).map((task: Datum) => ({
     ...task,
@@ -562,7 +563,7 @@ export function FleetConsole() {
         </section>
       </main>
 
-      {/* Grocery Task Creation Modal */}
+      {/* Multi-Product Grocery Task Creation Modal */}
       {isTaskModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-[#17221f] border border-[#283834] rounded-xl max-w-xl w-full p-6 text-white shadow-2xl space-y-5">
@@ -570,27 +571,41 @@ export function FleetConsole() {
               <div>
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
                   <Boxes className="text-[#3db89a]" size={22} />
-                  <span>Select Grocery Product Order</span>
+                  <span>Select Grocery Product Orders (Batch)</span>
                 </h2>
-                <p className="text-xs text-[#8aa39b] mt-1">Pick a product from storage racks; system automatically assigns nearest idle AMR</p>
+                <p className="text-xs text-[#8aa39b] mt-1">Select one or multiple items to pick; nearest idle AMRs will pick them concurrently</p>
               </div>
               <button type="button" onClick={() => setIsTaskModalOpen(false)} className="text-[#8aa39b] hover:text-white text-xl font-bold p-1">✕</button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              {groceryProducts.map((product, idx) => {
-                const isSelected = idx === selectedProductIndex;
+            <div className="flex items-center justify-between text-xs text-[#8aa39b] font-mono px-1">
+              <span>Selected: <strong className="text-emerald-400 font-bold">{selectedProductIds.length} Products</strong></span>
+              <div className="space-x-3">
+                <button type="button" onClick={selectAllProducts} className="text-[#3db89a] hover:underline font-medium">Select All</button>
+                <button type="button" onClick={clearProductSelection} className="text-[#8aa39b] hover:text-white hover:underline">Clear</button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 max-h-64 overflow-y-auto pr-1">
+              {groceryProducts.map((product) => {
+                const isSelected = selectedProductIds.includes(product.id);
                 return (
                   <button
                     key={product.id}
                     type="button"
-                    onClick={() => setSelectedProductIndex(idx)}
+                    onClick={() => toggleProductSelection(product.id)}
                     className={`p-3 rounded-lg border text-left transition-all flex items-start gap-3 ${
                       isSelected
                         ? 'border-[#3db89a] bg-[#1f332c] shadow-lg ring-1 ring-[#3db89a]'
                         : 'border-[#283834] bg-[#111816]/60 hover:border-[#385249]'
                     }`}
                   >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => {}} // Handled by container button click
+                      className="mt-1 accent-[#3db89a] w-4 h-4 rounded cursor-pointer pointer-events-none"
+                    />
                     <span className="text-2xl">{product.icon}</span>
                     <div className="overflow-hidden">
                       <div className="font-semibold text-sm text-white truncate">{product.name}</div>
@@ -603,20 +618,22 @@ export function FleetConsole() {
             </div>
 
             {/* Nearest Robot Auto Assignment Summary */}
-            <div className="bg-[#192723] border border-[#2e4d43] rounded-lg p-4 space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-[#8aa39b]">Target Shelf Rack:</span>
-                <span className="font-mono text-[#3db89a] font-semibold">{selectedProduct.rack} ({selectedProduct.pickup})</span>
+            <div className="bg-[#192723] border border-[#2e4d43] rounded-lg p-4 space-y-2 text-xs">
+              <div className="flex items-center justify-between font-mono">
+                <span className="text-[#8aa39b]">Batch Order Count:</span>
+                <span className="text-emerald-400 font-bold">{selectedProducts.length} Tasks to Dispatch</span>
               </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-[#8aa39b]">Product SKU:</span>
-                <span className="font-mono text-white text-[11px]">{selectedProduct.sku}</span>
+              <div className="flex items-center justify-between font-mono">
+                <span className="text-[#8aa39b]">Target Shelf Racks:</span>
+                <span className="text-white truncate max-w-[280px]">
+                  {selectedProducts.map((p) => p.rack).join(', ') || 'None selected'}
+                </span>
               </div>
-              <div className="flex items-center justify-between text-xs pt-2 border-t border-[#2e4d43]">
-                <span className="text-[#8aa39b]">Nearest Idle Robot:</span>
-                <span className="font-mono font-bold text-amber-400 flex items-center gap-1 text-sm">
-                  <Bot size={16} />
-                  {nearestIdleRobot ? `${nearestIdleRobot.id} (${nearestIdleRobot.distanceMeters ?? '3.5'}m away)` : 'AMR-01'}
+              <div className="flex items-center justify-between font-mono pt-2 border-t border-[#2e4d43]">
+                <span className="text-[#8aa39b]">Fleet Auto Assignment:</span>
+                <span className="text-amber-400 font-bold flex items-center gap-1">
+                  <Bot size={15} />
+                  Nearest Idle AMRs (AMR-01 .. AMR-10)
                 </span>
               </div>
             </div>
@@ -631,11 +648,12 @@ export function FleetConsole() {
               </button>
               <button
                 type="button"
-                onClick={handleDispatchTask}
-                className="px-5 py-2 rounded-lg bg-[#2e8b75] hover:bg-[#38a38a] text-white text-sm font-semibold flex items-center gap-2 transition-all shadow-md cursor-pointer"
+                disabled={!selectedProducts.length}
+                onClick={handleDispatchBatchTasks}
+                className="px-5 py-2 rounded-lg bg-[#2e8b75] hover:bg-[#38a38a] disabled:opacity-40 text-white text-sm font-bold flex items-center gap-2 transition-all shadow-md cursor-pointer"
               >
                 <Plus size={16} />
-                <span>Assign Task to {nearestIdleRobot?.id ?? 'AMR-01'}</span>
+                <span>Dispatch {selectedProducts.length} Batch Task{selectedProducts.length === 1 ? '' : 's'}</span>
               </button>
             </div>
           </div>

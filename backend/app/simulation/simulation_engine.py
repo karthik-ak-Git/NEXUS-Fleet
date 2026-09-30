@@ -18,12 +18,12 @@ from ..planning.path_planner import plan_route
 from ..coordination.peer_protocol import PeerNetwork
 from ..agents.robot_agent import RobotAgent, AgentContext
 
-ROBOT_IDS = ["AMR-01", "AMR-02", "AMR-03", "AMR-04", "AMR-05", "AMR-06"]
-STARTING_NODES = ["N-0-3", "N-2-1", "N-4-3", "N-2-5", "N-0-5", "N-4-1"]
-PRIORITIES = [0.92, 0.76, 0.84, 0.64, 0.72, 0.55]
+ROBOT_IDS = ["AMR-01", "AMR-02", "AMR-03", "AMR-04", "AMR-05", "AMR-06", "AMR-07", "AMR-08", "AMR-09", "AMR-10"]
+STARTING_NODES = ["N-0-2", "N-1-1", "N-2-1", "N-3-1", "N-4-1", "N-5-2", "N-0-6", "N-1-7", "N-2-7", "N-4-7"]
+PRIORITIES = [0.95, 0.88, 0.82, 0.75, 0.68, 0.62, 0.58, 0.52, 0.45, 0.40]
 
 class SimulationEngine:
-    def __init__(self, seed: int = 26123, mode: str = "distributed", robot_count: int = 6, task_count: int = 6):
+    def __init__(self, seed: int = 26123, mode: str = "distributed", robot_count: int = 10, task_count: int = 10):
         self.seed = seed
         self.random_state = seed
         self.mode = mode  # "distributed" | "baseline"

@@ -1,7 +1,7 @@
 import type { WarehouseEdge, WarehouseNode } from "./types";
 
-const XS = [-12, -8, -4, 0, 4, 8, 12];
-const YS = [-8, -4, 0, 4, 8];
+const XS = [-16, -12, -8, -4, 0, 4, 8, 12, 16];
+const YS = [-10, -6, -2, 2, 6, 10];
 
 export function createWarehouse() {
   const nodes: WarehouseNode[] = [];
@@ -13,13 +13,13 @@ export function createWarehouse() {
       const y = YS[row];
       const id = nodeId(row, col);
       const kind: WarehouseNode["kind"] =
-        (row === 0 && col === 0) || (row === 4 && col === 6)
+        (row === 0 && col === 0) || (row === 5 && col === 8)
           ? "charger"
-          : col === 6 && row === 2
+          : col === 8 && row === 2
             ? "packing"
             : col === 0 && row === 2
               ? "loading"
-              : row === 2 && col === 3
+              : (row === 2 && col === 4) || (row === 3 && col === 4)
                 ? "staging"
                 : "intersection";
       nodes.push({
@@ -35,7 +35,7 @@ export function createWarehouse() {
               : kind === "loading"
                 ? "INBOUND"
                 : kind === "staging"
-                  ? "STAGE-01"
+                  ? `STAGE-${row === 2 ? "01" : "02"}`
                   : `I-${String(row * XS.length + col + 1).padStart(2, "0")}`,
       });
     }
@@ -49,8 +49,7 @@ export function createWarehouse() {
     const x2 = XS[nextCol];
     const y2 = YS[nextRow];
     const vertical = col === nextCol;
-    const specialAisle =
-      vertical && col === 3 && Math.min(row, nextRow) === 1;
+    const specialAisle = vertical && col === 4 && Math.min(row, nextRow) === 2;
     const edgeId = specialAisle
       ? "C-17"
       : vertical
@@ -62,14 +61,14 @@ export function createWarehouse() {
       to,
       length: Math.hypot(x2 - x1, y2 - y1),
       estimatedTravelTime: 2,
-      capacity: specialAisle ? 1 : 2,
+      capacity: 3,
       direction: "both",
-      speedLimit: specialAisle ? 1.7 : 2,
+      speedLimit: 2.2,
       congestion: 0,
       blocked: false,
-      risk: specialAisle ? 0.16 : 0.04,
+      risk: specialAisle ? 0.12 : 0.03,
       occupancy: [],
-      narrow: specialAisle || (vertical && col % 2 === 0),
+      narrow: false,
     });
   };
 
@@ -105,16 +104,17 @@ export function edgeBetween(
 
 export function getRackLocations() {
   const rackNodes: Array<{ id: string; label: string; sku: string }> = [];
-  const letters = ["A", "B", "C", "D", "E"];
+  const letters = ["A", "B", "C", "D", "E", "F"];
   const groceryItems = [
     "ORGANIC_APPLES", "FRESH_MILK", "WHOLE_WHEAT_BREAD", "BASMATI_RICE",
     "OLIVE_OIL", "ALMOND_MILK", "GREEK_YOGURT", "ROASTED_COFFEE",
-    "ORANGE_JUICE", "CHOCOLATE_BAR", "GREEN_TEA", "PASTA_PACK"
+    "ORANGE_JUICE", "CHOCOLATE_BAR", "GREEN_TEA", "PASTA_PACK",
+    "HONEY_JAR", "PEANUT_BUTTER", "OAT_CEREAL", "DARK_ROAST_BEANS"
   ];
   let index = 0;
-  for (const row of [1, 2, 3]) {
-    for (const col of [1, 2, 4, 5]) {
-      const letter = letters[Math.floor(index / 4)];
+  for (const row of [1, 2, 3, 4]) {
+    for (const col of [1, 2, 3, 5, 6, 7]) {
+      const letter = letters[Math.floor(index / 4) % letters.length];
       const number = String((index % 4) + 11).padStart(2, "0");
       const item = groceryItems[index % groceryItems.length];
       rackNodes.push({
@@ -128,5 +128,5 @@ export function getRackLocations() {
   return rackNodes;
 }
 
-export const PACKING_NODE = nodeId(2, 6);
-export const CHARGER_NODES = [nodeId(0, 0), nodeId(4, 6)];
+export const PACKING_NODE = nodeId(2, 8);
+export const CHARGER_NODES = [nodeId(0, 0), nodeId(5, 8)];

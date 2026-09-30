@@ -12,7 +12,7 @@ from ..supabase_client import supabase_service
 router = APIRouter()
 
 # Global singleton simulation engine instance
-global_engine = SimulationEngine(seed=26123, mode="distributed", robot_count=6, task_count=6)
+global_engine = SimulationEngine(seed=26123, mode="distributed", robot_count=10, task_count=10)
 
 def get_engine() -> SimulationEngine:
     return global_engine

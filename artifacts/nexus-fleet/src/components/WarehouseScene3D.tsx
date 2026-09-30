@@ -90,33 +90,33 @@ function Floor() {
   return (
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.12, 0]} receiveShadow>
-        <planeGeometry args={[31, 22]} />
+        <planeGeometry args={[42, 28]} />
         <meshStandardMaterial color="#d9d7c9" roughness={0.88} />
       </mesh>
-      <gridHelper args={[30, 30, "#89968c", "#c3c3b5"]} position={[0, -0.105, 0]} />
+      <gridHelper args={[40, 40, "#89968c", "#c3c3b5"]} position={[0, -0.105, 0]} />
       <mesh position={[0, -0.28, 0]} receiveShadow>
-        <boxGeometry args={[31.5, 0.3, 22.5]} />
+        <boxGeometry args={[42.5, 0.3, 28.5]} />
         <meshStandardMaterial color="#9b9d91" roughness={0.9} />
       </mesh>
       <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[28, 18]} />
+        <planeGeometry args={[38, 24]} />
         <meshStandardMaterial color="#dfddcf" roughness={0.96} />
       </mesh>
-      {[-9, -4.5, 0, 4.5, 9].map((z) => (
+      {[-10, -6, -2, 2, 6, 10].map((z) => (
         <mesh key={z} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.035, z]}>
-          <planeGeometry args={[27, 0.055]} />
+          <planeGeometry args={[37, 0.055]} />
           <meshStandardMaterial color="#b2b5a8" roughness={0.8} />
         </mesh>
       ))}
-      {[-14.2, 14.2].map((x) => (
+      {[-18.5, 18.5].map((x) => (
         <mesh key={x} position={[x, 1.15, 0]} castShadow receiveShadow>
-          <boxGeometry args={[0.3, 2.3, 20]} />
+          <boxGeometry args={[0.3, 2.3, 26]} />
           <meshStandardMaterial color="#b8b9ad" roughness={0.78} />
         </mesh>
       ))}
-      {[-10, 10].map((z) => (
+      {[-12.5, 12.5].map((z) => (
         <mesh key={z} position={[0, 1.15, z]} castShadow receiveShadow>
-          <boxGeometry args={[28.5, 2.3, 0.28]} />
+          <boxGeometry args={[37.5, 2.3, 0.28]} />
           <meshStandardMaterial color="#c0c0b4" roughness={0.8} />
         </mesh>
       ))}
@@ -160,9 +160,9 @@ function Rack({ x, z, id }: { x: number; z: number; id: string }) {
 function WarehouseRacks() {
   const racks = useMemo(
     () =>
-      [-6, -1.5, 3, 7.5].flatMap((x, column) =>
-        [-6.1, -1.55, 3.1].map((z, row) => ({
-          id: `R-${String(row * 4 + column + 1).padStart(2, "0")}`,
+      [-12, -8, -4, 4, 8, 12].flatMap((x, column) =>
+        [-6, -2, 2, 6].map((z, row) => ({
+          id: `R-${String(row * 6 + column + 1).padStart(2, "0")}`,
           x,
           z,
         })),
@@ -173,18 +173,18 @@ function WarehouseRacks() {
     <group>
       {racks.map((rack) => <Rack key={rack.id} {...rack} />)}
       {[
-        [-12.8, -8.5], [12.8, -8.5], [-12.8, 8.5], [12.8, 8.5],
-        [-12.8, 0], [12.8, 0], [0, -9.2], [0, 9.2],
+        [-17.5, -11.5], [17.5, -11.5], [-17.5, 11.5], [17.5, 11.5],
+        [-17.5, 0], [17.5, 0], [0, -12], [0, 12],
       ].map(([x, z], index) => (
         <mesh key={index} position={[x, 1.45, z]} castShadow receiveShadow>
           <boxGeometry args={[0.42, 2.9, 0.42]} />
           <meshStandardMaterial color="#7a817a" metalness={0.18} roughness={0.65} />
         </mesh>
       ))}
-      <Station position={[-12.3, 0, 0]} label="INBOUND" tint="#a88951" />
-      <Station position={[12.3, 0, 0]} label="PACK / OUT" tint="#4e8277" />
-      <Station position={[-12.3, 0, -8]} label="CHG 01" tint="#578a7b" />
-      <Station position={[12.3, 0, 8]} label="CHG 02" tint="#578a7b" />
+      <Station position={[-16, 0, -2]} label="INBOUND" tint="#a88951" />
+      <Station position={[16, 0, -2]} label="PACK / OUT" tint="#4e8277" />
+      <Station position={[-16, 0, -10]} label="CHG 01" tint="#578a7b" />
+      <Station position={[16, 0, 10]} label="CHG 02" tint="#578a7b" />
       <group position={[-10, 0.32, 6.8]}>
         {[0, 0.65, 1.3].map((x) => (
           <group key={x} position={[x, 0, 0]}>
