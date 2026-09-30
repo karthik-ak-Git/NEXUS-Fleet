@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useSimulation } from '../simulation/useSimulation';
 import { WarehouseScene3D } from './WarehouseScene3D';
+import { PlanView2D } from './PlanView2D';
 
 type Datum = Record<string, any>;
 type Point = { x: number; y: number };
@@ -67,44 +68,6 @@ function MetricTile({ label, value, unit, icon: Icon, note }: {
         {unit && <small className="text-xs font-normal text-[#8aa39b]">{unit}</small>}
       </div>
       {note && <div className="text-[11px] text-[#8aa39b] font-mono">{note}</div>}
-    </div>
-  );
-}
-
-function PlanView2D({ robots, nodes, selectedId, onSelect }: {
-  robots: Datum[]; nodes: Datum[]; selectedId: string | null; onSelect: (id: string) => void;
-}) {
-  const nodeMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
-  return (
-    <div className="w-full h-[460px] bg-[#111816] rounded-xl border border-[#283834] p-4 relative overflow-hidden flex items-center justify-center">
-      <svg className="w-full h-full" viewBox="-15 -10 30 20">
-        <rect x="-14.5" y="-9.5" width="29" height="19" fill="#17221f" stroke="#283834" strokeWidth="0.2" rx="0.5" />
-        {/* Warehouse Nodes */}
-        {nodes.map((node) => (
-          <g key={node.id} transform={`translate(${node.x} ${node.y})`}>
-            <circle r="0.3" fill={node.kind === 'packing' ? '#3db89a' : node.kind === 'charger' ? '#38bdf8' : '#283834'} />
-            <text y="-0.5" fontSize="0.4" fill="#8aa39b" textAnchor="middle" className="font-mono">{node.label}</text>
-          </g>
-        ))}
-        {/* Robots */}
-        {robots.map((robot) => {
-          const isSelected = str(robot.id) === selectedId;
-          return (
-            <g
-              key={str(robot.id)}
-              transform={`translate(${robot.x ?? 0} ${robot.y ?? 0})`}
-              onClick={() => onSelect(str(robot.id))}
-              className="cursor-pointer"
-            >
-              <circle r={isSelected ? '0.9' : '0.7'} fill={isSelected ? '#f59e0b' : '#2e8b75'} opacity="0.4" />
-              <circle r="0.5" fill={isSelected ? '#f59e0b' : '#3db89a'} stroke="#ffffff" strokeWidth="0.1" />
-              <text y="0.15" fontSize="0.3" fill="#ffffff" fontWeight="bold" textAnchor="middle" className="font-mono">
-                {str(robot.id).replace('AMR-', '')}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
     </div>
   );
 }
@@ -351,13 +314,6 @@ export function FleetConsole() {
                       FOLLOW
                     </button>
                     <button
-                      onClick={() => setDebugMode(!debugMode)}
-                      className={`px-3 py-1.5 rounded-lg border font-mono transition-all ${debugMode ? 'bg-amber-600 border-amber-400 text-white font-bold' : 'bg-[#111816] border-[#283834] text-[#8aa39b] hover:text-white'}`}
-                      title="Toggle Developer Digital-Twin Telemetry & Debug Layer"
-                    >
-                      DEBUG
-                    </button>
-                    <button
                       onClick={() => { setFollowRobot(false); setTopView(false); setCameraReset((v) => v + 1); }}
                       className="p-1.5 rounded-lg bg-[#111816] border border-[#283834] text-[#8aa39b] hover:text-white transition-colors"
                       title="Reset Camera"
@@ -366,6 +322,13 @@ export function FleetConsole() {
                     </button>
                   </>
                 )}
+                <button
+                  onClick={() => setDebugMode(!debugMode)}
+                  className={`px-3 py-1.5 rounded-lg border font-mono transition-all ${debugMode ? 'bg-amber-600 border-amber-400 text-white font-bold' : 'bg-[#111816] border-[#283834] text-[#8aa39b] hover:text-white'}`}
+                  title="Toggle Developer Digital-Twin Telemetry & Debug Layer"
+                >
+                  DEBUG
+                </button>
               </div>
             </div>
 
@@ -388,10 +351,13 @@ export function FleetConsole() {
               </div>
             ) : (
               <PlanView2D
-                robots={robots}
+                robots={rawRobots}
                 nodes={data?.nodes ?? []}
+                edges={data?.edges ?? []}
+                reservations={data?.reservations ?? []}
                 selectedId={data?.selectedRobotId ?? null}
                 onSelect={(id) => selectRobot(id)}
+                debugMode={debugMode}
               />
             )}
 

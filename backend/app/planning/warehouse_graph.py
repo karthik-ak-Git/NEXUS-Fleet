@@ -54,6 +54,9 @@ def create_warehouse() -> Tuple[List[WarehouseNodeSchema], List[WarehouseEdgeSch
         x1, y1 = XS[col], YS[row]
         x2, y2 = XS[next_col], YS[next_row]
         vertical = (col == next_col)
+        # Exclude vertical edges crossing physical shelf blocks at rack columns
+        if vertical and (col in [1, 2, 3, 5, 6, 7]) and (min(row, next_row) in [1, 3]):
+            return
         special_aisle = vertical and col == 4 and min(row, next_row) == 2
 
         if special_aisle:

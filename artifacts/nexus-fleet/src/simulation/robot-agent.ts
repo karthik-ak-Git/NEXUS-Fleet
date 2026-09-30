@@ -727,41 +727,37 @@ export class RobotAgent {
     if (previousTask) this.state.taskQueue = this.state.taskQueue.filter((id) => id !== previousTask);
   }
 
+  private getHomeSlot(): string {
+    const homeMap: Record<string, string> = {
+      "AMR-01": "N-0-0",
+      "AMR-02": "N-0-1",
+      "AMR-03": "N-0-2",
+      "AMR-04": "N-5-6",
+      "AMR-05": "N-5-7",
+      "AMR-06": "N-5-8",
+    };
+    return homeMap[this.state.id] ?? "N-0-0";
+  }
+
   private chooseGoal(context: AgentContext) {
     if (this.chargeTarget) return this.chargeTarget;
     const task = context.tasks.find((item) => item.id === this.state.currentTaskId);
     if (!task) {
-      const current = nodeById(context.nodes, this.state.currentNode);
-      if (current?.kind === "packing") {
-        const parking = context.nodes
-          .filter((node) => node.kind === "staging" || node.kind === "intersection")
-          .filter((node) => node.id !== this.state.currentNode)
-          .filter((node) =>
-            !context.reservations.some(
-              (reservation) =>
-                reservation.status === "ACTIVE" &&
-                reservation.ownerRobot !== this.state.id &&
-                reservation.resourceId === node.id,
-            ),
-          )
-          .sort(
-            (a, b) =>
-              Math.hypot(a.x - current.x, a.y - current.y) -
-              Math.hypot(b.x - current.x, b.y - current.y),
-          );
-        const clearNode = parking.find(
-          (node) =>
-            !this.getPeers(context.now).some(
-              (peer) => peer.node === node.id && peer.status !== "FAILED",
-            ),
-        );
-        if (clearNode) {
-          this.state.intent = "CLEAR_PACKING";
-          this.state.destination = clearNode.id;
-          return clearNode.id;
+      const homeNode = this.getHomeSlot();
+      if (this.state.currentNode !== homeNode) {
+        this.state.intent = "RETURNING_HOME";
+        this.state.destination = homeNode;
+        this.state.reason = `No active task; returning home to charging slot ${homeNode}.`;
+        return homeNode;
+      } else {
+        if (this.state.intent === "RETURNING_HOME") {
+          this.state.intent = "CHARGING";
+          this.state.status = "IDLE";
+          this.state.reason = `Docked at home charging slot ${homeNode}.`;
         }
+        this.state.destination = null;
+        return null;
       }
-      return null;
     }
     return task.picked ? task.destination : task.pickup;
   }

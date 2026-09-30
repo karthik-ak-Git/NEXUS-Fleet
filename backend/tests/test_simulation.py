@@ -7,7 +7,7 @@ from backend.app.agents.robot_agent import RobotAgent
 def test_warehouse_graph_initialization():
     nodes, edges = create_warehouse()
     assert len(nodes) == 54  # 9 cols x 6 rows
-    assert len(edges) == 93  # Grid topology edges
+    assert len(edges) == 81  # Valid aisle topology edges (12 vertical shelf-crossing edges excluded)
 
     c17 = next((e for e in edges if e.id == "C-17"), None)
     assert c17 is not None

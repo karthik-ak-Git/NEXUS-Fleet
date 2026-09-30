@@ -2,6 +2,7 @@ import { Line, OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Component, useEffect, useMemo, useRef, type ReactNode } from "react";
 import * as THREE from "three";
+import { GLOBAL_WAREHOUSE_LAYOUT } from "../simulation/warehouseLayout";
 
 type Datum = Record<string, any>;
 
@@ -157,21 +158,28 @@ function Rack({ x, z, id }: { x: number; z: number; id: string }) {
   );
 }
 
-function WarehouseRacks() {
-  const racks = useMemo(
-    () =>
-      [-12, -8, -4, 4, 8, 12].flatMap((x, column) =>
-        [-6, -2, 2, 6].map((z, row) => ({
-          id: `R-${String(row * 6 + column + 1).padStart(2, "0")}`,
-          x,
-          z: z + (row % 2 === 0 ? 1.6 : -1.6),
-        })),
-      ),
-    [],
-  );
+function WarehouseRacks({ debugMode }: { debugMode?: boolean }) {
+  const layout = GLOBAL_WAREHOUSE_LAYOUT;
   return (
     <group>
-      {racks.map((rack) => <Rack key={rack.id} {...rack} />)}
+      {layout.shelves.map((shelf) => (
+        <group key={shelf.id}>
+          <Rack x={shelf.x} z={shelf.y} id={shelf.id} />
+          {/* Subtle Approach / Pickup Point Marker outside shelf on aisle centerline */}
+          <mesh position={[shelf.pickupPoint.x, 0.04, shelf.pickupPoint.y]} rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[0.22, 0.35, 24]} />
+            <meshBasicMaterial color="#a855f7" transparent opacity={0.7} />
+          </mesh>
+          {debugMode && (
+            <mesh position={[shelf.x, 1.2, shelf.y]}>
+              <boxGeometry args={[shelf.width, shelf.height, shelf.depth]} />
+              <meshBasicMaterial color="#ef4444" wireframe />
+            </mesh>
+          )}
+        </group>
+      ))}
+
+      {/* Perimeter Support Pillars */}
       {[
         [-17.5, -11.5], [17.5, -11.5], [-17.5, 11.5], [17.5, 11.5],
         [-17.5, 0], [17.5, 0], [0, -12], [0, 12],
@@ -181,24 +189,44 @@ function WarehouseRacks() {
           <meshStandardMaterial color="#7a817a" metalness={0.18} roughness={0.65} />
         </mesh>
       ))}
+
+      {/* Stations */}
       <Station position={[-16, 0, -2]} label="INBOUND" tint="#a88951" />
       <Station position={[16, 0, -2]} label="PACK / OUT" tint="#4e8277" />
-      <Station position={[-16, 0, -10]} label="CHG 01" tint="#578a7b" />
-      <Station position={[16, 0, 10]} label="CHG 02" tint="#578a7b" />
-      <group position={[-10, 0.32, 6.8]}>
-        {[0, 0.65, 1.3].map((x) => (
-          <group key={x} position={[x, 0, 0]}>
-            <mesh castShadow position={[0, 0.32, 0]}>
-              <boxGeometry args={[0.62, 0.6, 0.62]} />
-              <meshStandardMaterial color="#ad8957" roughness={0.88} />
-            </mesh>
-            <mesh castShadow position={[0, 0.76, 0]}>
-              <boxGeometry args={[0.54, 0.25, 0.54]} />
-              <meshStandardMaterial color="#8b5940" roughness={0.92} />
-            </mesh>
-          </group>
-        ))}
-      </group>
+
+      {/* 6 Home Charging Bays */}
+      {layout.chargingSlots.map((slot) => (
+        <ChargingBay key={slot.id} slot={slot} />
+      ))}
+    </group>
+  );
+}
+
+function ChargingBay({ slot }: { slot: typeof GLOBAL_WAREHOUSE_LAYOUT.chargingSlots[0] }) {
+  const zOffset = slot.y < 0 ? -0.7 : 0.7;
+  return (
+    <group position={[slot.x, 0, slot.y]}>
+      {/* Floor Dock Pad */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} receiveShadow>
+        <planeGeometry args={[2.2, 1.6]} />
+        <meshStandardMaterial color="#142520" roughness={0.6} />
+      </mesh>
+      {/* Floor Dock Ring */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
+        <ringGeometry args={[0.3, 0.5, 24]} />
+        <meshBasicMaterial color="#3db89a" transparent opacity={0.8} />
+      </mesh>
+      {/* Charger Tower */}
+      <mesh position={[0, 0.75, zOffset]} castShadow>
+        <boxGeometry args={[0.6, 1.5, 0.25]} />
+        <meshStandardMaterial color="#2d423c" metalness={0.6} roughness={0.3} />
+      </mesh>
+      {/* LED Indicator */}
+      <mesh position={[0, 1.35, zOffset * 0.8]}>
+        <sphereGeometry args={[0.08, 16, 16]} />
+        <meshBasicMaterial color="#3db89a" />
+      </mesh>
+      <LabelSprite position={[0, 1.8, 0]} text={`${slot.id} · ${slot.assignedRobotId}`} tone="station" size={[1.4, 0.28]} />
     </group>
   );
 }
@@ -733,7 +761,7 @@ export function WarehouseScene3D({
             shadow-camera-bottom={-20}
           />
           <Floor />
-          <WarehouseRacks />
+          <WarehouseRacks debugMode={debugMode} />
           <DockingZoneMat position={[16, 0, -2]} />
           <DebugGraphOverlay nodes={nodeMap} edges={edges} debugMode={debugMode} />
           <ResourceOverlays edges={edges} nodes={nodeMap} reservations={reservations} obstacles={obstacles} />

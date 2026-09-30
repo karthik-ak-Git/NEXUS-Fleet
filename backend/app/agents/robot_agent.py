@@ -577,23 +577,35 @@ class RobotAgent:
         if prev_task:
             self.state.taskQueue = [tid for tid in self.state.taskQueue if tid != prev_task]
 
+    def _get_home_slot(self) -> str:
+        home_map = {
+            "AMR-01": "N-0-0",
+            "AMR-02": "N-0-1",
+            "AMR-03": "N-0-2",
+            "AMR-04": "N-5-6",
+            "AMR-05": "N-5-7",
+            "AMR-06": "N-5-8",
+        }
+        return home_map.get(self.state.id, "N-0-0")
+
     def _choose_goal(self, context: AgentContext) -> Optional[str]:
         if self.charge_target:
             return self.charge_target
         task = next((t for t in context.tasks if t.id == self.state.currentTaskId), None)
         if not task:
-            current_n = node_by_id(context.nodes, self.state.currentNode)
-            if current_n and current_n.kind == "packing":
-                parking = [n for n in context.nodes if n.kind in ("staging", "intersection") and n.id != self.state.currentNode]
-                parking = [n for n in parking if not any(r.status == "ACTIVE" and r.ownerRobot != self.state.id and r.resourceId == n.id for r in context.reservations)]
-                parking.sort(key=lambda n: math.hypot(n.x - current_n.x, n.y - current_n.y))
-                active_peers = self.get_peers(context.now)
-                clear_n = next((n for n in parking if not any(p.node == n.id and p.status != "FAILED" for p in active_peers)), None)
-                if clear_n:
-                    self.state.intent = "CLEAR_PACKING"
-                    self.state.destination = clear_n.id
-                    return clear_n.id
-            return None
+            home_node = self._get_home_slot()
+            if self.state.currentNode != home_node:
+                self.state.intent = "RETURNING_HOME"
+                self.state.destination = home_node
+                self.state.reason = f"No active task; returning home to charging slot {home_node}."
+                return home_node
+            else:
+                if self.state.intent == "RETURNING_HOME":
+                    self.state.intent = "CHARGING"
+                    self.state.status = "IDLE"
+                    self.state.reason = f"Docked at home charging slot {home_node}."
+                self.state.destination = None
+                return None
         return task.destination if task.picked else task.pickup
 
     def _ensure_route(self, goal: str, context: AgentContext):
