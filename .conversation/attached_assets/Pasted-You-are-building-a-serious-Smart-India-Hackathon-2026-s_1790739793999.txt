@@ -1,0 +1,2466 @@
+You are building a serious Smart India Hackathon 2026 solution.
+
+DO NOT BUILD A GENERIC DASHBOARD.
+DO NOT BUILD A STATIC 3D DEMO.
+DO NOT BUILD A CHATBOT.
+DO NOT BUILD A CENTRAL AI CONTROLLER THAT TELLS EVERY ROBOT WHAT TO DO.
+
+BUILD A FUNCTIONAL AUTONOMOUS MULTI-ROBOT WAREHOUSE SIMULATION.
+
+============================================================
+PROJECT
+============================================================
+
+Product Name:
+
+NEXUS-Fleet
+
+Subtitle:
+
+Distributed Edge-AI Coordination for Autonomous Mobile Robots
+
+SIH Problem Statement:
+
+SIH26123
+
+Title:
+
+Edge-AI Based Distributed Fleet Coordination for Autonomous Mobile Robots (AMRs) in Smart Warehouses
+
+Organization:
+
+Bharat Electronics Limited
+
+Theme:
+
+Smart Automation
+
+Category:
+
+Software
+
+============================================================
+CORE PRODUCT IDEA
+============================================================
+
+The central idea of the entire product is:
+
+EVERY ROBOT IS AN AUTONOMOUS AGENT.
+
+The robots themselves must:
+
+- observe
+- understand their local environment
+- predict future conflicts
+- plan routes
+- communicate with other robots
+- negotiate access to shared warehouse resources
+- allocate/reallocate tasks
+- avoid collisions
+- detect deadlocks
+- resolve deadlocks
+- detect blocked aisles
+- reroute automatically
+- manage battery
+- handle communication failures
+- handle robot failures
+- recover from unexpected situations
+- continue operating without a central fleet brain
+
+The dashboard is ONLY an observation and analysis layer.
+
+The dashboard must NOT be the decision maker.
+
+The user must NOT manually control robot decisions.
+
+The user may inject disturbances into the environment, but after the disturbance the robots must solve the problem automatically.
+
+============================================================
+THE MOST IMPORTANT TEST
+============================================================
+
+The application must pass this test:
+
+If the dashboard/control UI disappears, the robot agents should still conceptually be capable of:
+
+- maintaining local state
+- planning
+- communicating peer-to-peer
+- negotiating
+- avoiding collisions
+- rerouting
+- detecting deadlocks
+- recovering
+- completing tasks
+
+The UI is a digital twin and observability layer.
+
+The autonomous agents are the actual product.
+
+============================================================
+ARCHITECTURE
+============================================================
+
+DO NOT build:
+
+CentralFleetAI
+        |
+        +--> Robot 1
+        +--> Robot 2
+        +--> Robot 3
+
+Build:
+
+RobotAgent-01 <------> RobotAgent-02
+      ^                       ^
+      |                       |
+      v                       v
+RobotAgent-03 <------> RobotAgent-04
+
+Every RobotAgent has its own local decision-making state.
+
+The simulation environment may have shared physics/rendering state.
+
+The UI may subscribe to simulation state.
+
+A simulation clock may be shared.
+
+A rendering engine may be shared.
+
+A peer message bus may exist to simulate local wireless communication.
+
+BUT:
+
+There must NOT be one centralized function that calculates all robot decisions and directly commands every robot.
+
+============================================================
+AUTONOMOUS AGENT LOOP
+============================================================
+
+Every robot must continuously execute:
+
+OBSERVE
+→ UPDATE LOCAL WORLD MODEL
+→ PREDICT
+→ PLAN
+→ COMMUNICATE
+→ NEGOTIATE
+→ ACT
+→ VERIFY
+→ RECOVER
+
+This must actually affect simulation state.
+
+Do not fake this using animations.
+
+For every simulation tick, each RobotAgent should independently evaluate its own state.
+
+============================================================
+ROBOT AGENT STATE
+============================================================
+
+Every robot must maintain:
+
+robotId
+position
+rotation
+velocity
+acceleration
+battery
+currentTask
+taskQueue
+taskPriority
+currentRoute
+candidateRoutes
+currentWaypoint
+destination
+ETA
+localMap
+nearbyRobots
+peerStates
+peerMessageCache
+communicationStatus
+communicationFreshness
+currentIntent
+currentReservation
+reservationHistory
+conflicts
+deadlockState
+healthState
+failureState
+chargingState
+decisionHistory
+eventHistory
+
+Robot examples:
+
+AMR-01
+AMR-02
+AMR-03
+AMR-04
+AMR-05
+AMR-06
+
+The system must support at least 3 robots.
+
+Architect it so more robots can be added.
+
+============================================================
+WAREHOUSE ENVIRONMENT
+============================================================
+
+Create a realistic 3D e-commerce warehouse.
+
+This is NOT a decorative 3D scene.
+
+The 3D environment is the actual simulation world.
+
+Include:
+
+- warehouse floor
+- structural columns
+- industrial storage racks
+- shelves
+- SKU locations
+- pallets
+- bins
+- picking areas
+- narrow aisles
+- wide aisles
+- intersections
+- choke points
+- packing stations
+- staging areas
+- inbound area
+- outbound/loading area
+- charging stations
+- safety zones
+- restricted zones
+- blocked zones
+- warehouse entrances
+- warehouse exits
+
+Use realistic proportions.
+
+Use Three.js / React Three Fiber.
+
+The warehouse must look like an actual modern fulfillment center.
+
+============================================================
+3D CAMERA
+============================================================
+
+Implement:
+
+- orbit camera
+- pan
+- zoom
+- rotate
+- smooth camera movement
+- reset camera
+- top-down view
+- follow robot
+- focus selected robot
+- focus conflict
+- focus deadlock
+- cinematic demo camera
+
+The user must be able to inspect the warehouse from any angle.
+
+============================================================
+ROBOT 3D MODEL
+============================================================
+
+Create visually distinct AMRs.
+
+Each AMR must have:
+
+- chassis
+- wheels
+- sensor representation
+- status light
+- robot ID
+- small telemetry label
+- direction indicator
+- task indicator
+
+Robot visual states:
+
+MOVING
+WAITING
+NEGOTIATING
+YIELDING
+REROUTING
+BLOCKED
+CHARGING
+COMMUNICATION_LOST
+FAILED
+RECOVERING
+COMPLETED
+
+The visual state must correspond to actual agent state.
+
+============================================================
+WAREHOUSE GRAPH
+============================================================
+
+Represent the warehouse navigation environment as a graph.
+
+Nodes:
+
+- aisle intersections
+- rack endpoints
+- pickup points
+- packing stations
+- charging stations
+- loading zones
+- staging zones
+- recovery points
+
+Edges:
+
+- aisle segments
+- corridors
+- navigation connections
+
+Each edge must contain:
+
+edgeId
+from
+to
+length
+estimatedTravelTime
+capacity
+direction
+speedLimit
+congestion
+blocked
+risk
+reservation
+occupancy
+
+The graph is used by the robot planners.
+
+============================================================
+TASK SYSTEM
+============================================================
+
+Create a realistic warehouse task system.
+
+Tasks represent customer/e-commerce fulfillment operations.
+
+Example:
+
+TASK-1042
+
+Order:
+ORD-78421
+
+SKU:
+SKU-RED-104
+
+Pickup:
+Rack A-17
+
+Destination:
+Packing Station 02
+
+Priority:
+HIGH
+
+Deadline:
+simulation time
+
+Status:
+WAITING
+
+Create multiple simultaneous tasks.
+
+Tasks must have:
+
+- taskId
+- orderId
+- SKU
+- pickup location
+- delivery location
+- priority
+- deadline
+- workload
+- estimated distance
+- energy estimate
+- status
+- assigned robot
+- creation timestamp
+
+============================================================
+AUTONOMOUS TASK ALLOCATION
+============================================================
+
+NEVER manually assign every task.
+
+When a task is created:
+
+Every eligible robot calculates its own bid.
+
+Bid factors:
+
+- distance
+- ETA
+- current workload
+- battery
+- congestion
+- route conflict risk
+- task priority
+- expected completion time
+- energy impact
+
+Example:
+
+AMR-01:
+ETA 14s
+distance 18m
+battery impact LOW
+conflict risk LOW
+
+AMR-02:
+ETA 9s
+distance 11m
+battery impact MEDIUM
+conflict risk HIGH
+
+AMR-03:
+ETA 17s
+distance 22m
+battery impact LOW
+conflict risk LOW
+
+The agents evaluate the bids.
+
+The task is automatically assigned.
+
+Show this decision in the UI.
+
+Do not require a human to select the robot.
+
+============================================================
+TASK REASSIGNMENT
+============================================================
+
+If the assigned robot:
+
+- fails
+- loses capability
+- reaches critical battery
+- becomes unavailable
+- encounters an unrecoverable blockage
+
+then automatically:
+
+1. detect the problem
+2. invalidate the assignment if necessary
+3. calculate eligible robots
+4. generate new bids
+5. select replacement
+6. update task
+7. update route
+8. continue fulfillment
+
+No human intervention.
+
+============================================================
+ROUTE PLANNING
+============================================================
+
+Implement A* or equivalent graph-based path planning.
+
+But DO NOT use pure shortest distance.
+
+Route cost must include:
+
+distance
++ predicted travel time
++ congestion
++ reservation conflicts
++ blockage
++ battery cost
++ collision risk
++ expected waiting
++ task urgency
+
+Therefore:
+
+SHORTEST PATH != ALWAYS BEST PATH
+
+The robot must be capable of deliberately choosing a slightly longer path because it is faster or safer.
+
+============================================================
+DYNAMIC REPLANNING
+============================================================
+
+Robots must continuously re-evaluate their route.
+
+Replan when:
+
+- aisle blocked
+- congestion changes
+- reservation conflict appears
+- robot failure occurs
+- task changes
+- battery becomes critical
+- communication state changes
+- unexpected obstacle appears
+- deadlock recovery is triggered
+
+Route changes must actually affect robot movement.
+
+============================================================
+PEER-TO-PEER COMMUNICATION
+============================================================
+
+Implement a simulated local peer-to-peer network.
+
+Robots communicate directly.
+
+Do not route every decision through a central controller.
+
+Messages should include:
+
+HEARTBEAT
+
+STATE_UPDATE
+
+INTENT_UPDATE
+
+ROUTE_INTENT
+
+TASK_BID
+
+TASK_AWARD
+
+TASK_REASSIGN
+
+CONFLICT_ALERT
+
+RESERVATION_REQUEST
+
+RESERVATION_GRANTED
+
+RESERVATION_DENIED
+
+YIELD_REQUEST
+
+YIELD_ACK
+
+EDGE_BLOCKED
+
+DEADLOCK_ALERT
+
+RECOVERY_REQUEST
+
+STATE_SYNC
+
+Every message must contain:
+
+sender
+receiver/broadcast target
+timestamp
+message type
+payload
+TTL/freshness
+sequence number
+
+============================================================
+LOCAL WORLD MODEL
+============================================================
+
+Each robot must maintain its own local world model.
+
+It contains:
+
+- warehouse graph
+- known obstacles
+- known blocked edges
+- nearby robot states
+- last known robot positions
+- peer intents
+- reservations
+- task state
+- charging stations
+- congestion observations
+- communication freshness
+
+Peer information must become stale if no updates are received.
+
+Do not assume peer information remains valid forever.
+
+============================================================
+PREDICTIVE CONFLICT DETECTION
+============================================================
+
+Do NOT wait for robots to physically collide.
+
+Predict conflicts in advance.
+
+A conflict occurs when:
+
+- robots target the same intersection
+- robots target the same narrow aisle
+- routes cross
+- movement directions conflict
+- time windows overlap
+- reservations overlap
+- predicted collision time becomes unsafe
+
+Calculate:
+
+robotA
+robotB
+resource
+ETA-A
+ETA-B
+time overlap
+priority-A
+priority-B
+risk
+predicted delay
+
+Generate:
+
+CONFLICT_PREDICTED
+
+before physical contact.
+
+============================================================
+CONFLICT VISUALIZATION
+============================================================
+
+When a conflict is predicted:
+
+Visually show:
+
+- both robots
+- both planned routes
+- intersection/choke point
+- predicted collision point
+- ETA of each robot
+- conflict zone
+- current reservations
+- priority
+- negotiation state
+
+Example UI:
+
+CONFLICT PREDICTED
+
+AMR-01
+ETA: 8.4s
+Priority: 0.76
+
+AMR-02
+ETA: 8.9s
+Priority: 0.52
+
+Resource:
+INTERSECTION-I04
+
+Status:
+NEGOTIATING
+
+============================================================
+AUTONOMOUS NEGOTIATION
+============================================================
+
+This is one of the most important features.
+
+When two robots want the same resource:
+
+THE USER DOES NOTHING.
+
+The robots negotiate.
+
+Possible decisions:
+
+PROCEED
+YIELD
+WAIT
+REROUTE
+REQUEST_RESERVATION
+MODIFY_RESERVATION
+
+Priority calculation may consider:
+
+task urgency
+wait time
+battery criticality
+distance to resource
+remaining route
+predicted delay
+starvation prevention
+
+Example:
+
+AMR-01
+Priority = 0.72
+
+AMR-02
+Priority = 0.48
+
+AMR-02 autonomously chooses:
+
+YIELD
+
+AMR-01:
+
+RESERVATION GRANTED
+
+AMR-01 enters intersection.
+
+AMR-01 exits.
+
+Reservation releases.
+
+AMR-02 proceeds.
+
+The actual robot movement must demonstrate the result.
+
+============================================================
+TIME-BASED RESERVATIONS
+============================================================
+
+Implement reservation leases.
+
+Reservation:
+
+reservationId
+resourceId
+ownerRobot
+startTime
+endTime
+priority
+status
+
+Example:
+
+R-8821
+
+Resource:
+INTERSECTION-I04
+
+Owner:
+AMR-01
+
+Start:
+12.4s
+
+End:
+16.7s
+
+Priority:
+0.72
+
+Reservations must:
+
+- expire
+- release
+- be denied
+- be modified
+- be renewed
+- be invalidated when necessary
+
+Do not permit incompatible overlapping reservations.
+
+============================================================
+DEADLOCK DETECTION
+============================================================
+
+Implement actual deadlock detection.
+
+Use a wait-for graph.
+
+Example:
+
+AMR-01 waits for AMR-02
+
+AMR-02 waits for AMR-03
+
+AMR-03 waits for AMR-01
+
+This creates:
+
+AMR-01
+  ↓
+AMR-02
+  ↓
+AMR-03
+  ↓
+AMR-01
+
+Detect the cycle.
+
+Generate:
+
+DEADLOCK_DETECTED
+
+Then automatically select a recovery strategy.
+
+Possible recovery actions:
+
+- yield
+- release reservation
+- backtrack
+- reverse to recovery node
+- reroute
+- wait
+- change priority
+- cancel conflicting reservation
+
+Select the safest/lowest-cost recovery.
+
+Then verify:
+
+cycle removed
+traffic restored
+robots resumed
+
+Do NOT simply display "deadlock resolved".
+
+The robots must actually move and recover.
+
+============================================================
+DEADLOCK UI
+============================================================
+
+Show:
+
+DEADLOCK #D-003
+
+Affected robots:
+
+AMR-01
+AMR-02
+AMR-03
+
+Wait-for graph
+
+Root cause
+
+Current reservations
+
+Recovery decision
+
+Recovery progress
+
+Final result
+
+Example:
+
+RECOVERY:
+
+AMR-03 releases corridor
+AMR-02 reroutes
+AMR-01 proceeds
+
+RESULT:
+
+Cycle eliminated.
+
+============================================================
+BLOCKED AISLE
+============================================================
+
+Implement dynamic aisle blockage.
+
+A user can inject:
+
+BLOCK AISLE C-17
+
+But after injection:
+
+THE ROBOTS MUST SOLVE IT AUTOMATICALLY.
+
+The affected robot must:
+
+1. detect blockage
+2. mark edge blocked
+3. broadcast EDGE_BLOCKED
+4. update local map
+5. invalidate affected route
+6. generate alternative routes
+7. evaluate congestion
+8. evaluate reservations
+9. negotiate if needed
+10. select new route
+11. resume task
+
+Other robots must also receive the blockage information.
+
+============================================================
+BLOCKAGE VISUALIZATION
+============================================================
+
+Blocked aisle should visibly show:
+
+physical obstacle
+BLOCKED label
+affected route
+old route
+new route
+reroute animation
+
+UI:
+
+AISLE BLOCKED
+
+Edge:
+C-17
+
+Affected robots:
+AMR-02
+AMR-04
+
+AMR-02:
+REPLANNING
+
+AMR-04:
+REROUTING
+
+============================================================
+REACTIVE SAFETY SYSTEM
+============================================================
+
+Strategic planning is not enough.
+
+Implement a local safety supervisor.
+
+Safety inputs:
+
+robot distance
+obstacle distance
+collision time
+velocity
+robot footprint
+sensor freshness
+peer freshness
+emergency zones
+
+Output:
+
+NORMAL
+SLOW
+STOP
+EMERGENCY_STOP
+
+Unexpected obstacle example:
+
+A box suddenly appears in front of AMR-01.
+
+AMR-01:
+
+Obstacle detected
+↓
+collision risk calculated
+↓
+SLOW
+or
+STOP
+↓
+wait
+↓
+obstacle clears
+↓
+resume
+
+No human click.
+
+============================================================
+UNEXPECTED OBSTACLE
+============================================================
+
+Create an environment disturbance:
+
+INJECT OBSTACLE
+
+Possible obstacles:
+
+- pallet
+- box
+- forklift
+- temporary blockage
+- human worker placeholder
+
+Robot must react locally.
+
+The obstacle should physically appear in the 3D warehouse.
+
+============================================================
+COMMUNICATION LOSS
+============================================================
+
+Implement per-robot communication failure.
+
+Example:
+
+Disable AMR-02 communication.
+
+AMR-02 must show:
+
+COMMUNICATION LOST
+
+But AMR-02 must NOT simply freeze.
+
+It continues using:
+
+- local state
+- local world model
+- last known peer state
+- local route
+- local safety logic
+
+Other robots detect:
+
+AMR-02 state stale
+
+They become conservative around the last known state.
+
+When communication returns:
+
+HANDSHAKE
+↓
+STATE SYNC
+↓
+RESERVATION SYNC
+↓
+ROUTE RECONCILIATION
+↓
+RESUME
+
+This scenario must demonstrate why decentralized agents are useful.
+
+============================================================
+ROBOT FAILURE
+============================================================
+
+Implement:
+
+FAIL AMR-03
+
+AMR-03 becomes unavailable.
+
+Other agents must:
+
+1. detect heartbeat timeout
+2. mark AMR-03 unavailable
+3. identify affected tasks
+4. release/expire its reservations
+5. re-auction tasks
+6. assign replacement robots
+7. replan affected routes
+8. continue operation
+
+The entire fleet must not stop.
+
+============================================================
+BATTERY MANAGEMENT
+============================================================
+
+Every robot has:
+
+battery %
+battery capacity
+energy consumption
+estimated range
+charging threshold
+critical threshold
+
+Robot predicts whether it can complete its current task.
+
+If not:
+
+- finish safe portion if possible
+- request task reassignment
+- navigate to charging station
+- reserve charger
+- charge
+- rejoin fleet
+
+Low battery must affect task bidding.
+
+A low-battery robot should become less suitable for long tasks.
+
+============================================================
+EDGE INTELLIGENCE
+============================================================
+
+Implement a lightweight prediction layer.
+
+Use it for:
+
+- ETA prediction
+- travel time prediction
+- congestion prediction
+- conflict-risk prediction
+- route-cost estimation
+- task-cost estimation
+
+Example:
+
+Historical traversal:
+5.2 sec
+
+Current congestion:
+HIGH
+
+Predicted traversal:
+8.7 sec
+
+That prediction must affect route selection.
+
+Do not use a generic LLM/chatbot as the primary intelligence.
+
+The autonomous system must work without a generative AI API.
+
+The architecture should be ready for later deployment to Raspberry Pi / Jetson-class edge hardware.
+
+============================================================
+AI BOUNDARY
+============================================================
+
+Use AI/ML-style prediction only where useful:
+
+prediction
+optimization
+ETA
+congestion
+risk
+
+Use deterministic logic for:
+
+collision safety
+emergency stop
+hard constraints
+reservation validity
+deadlock graph
+route validity
+
+Never allow an AI text model to directly control wheel movement.
+
+============================================================
+DECISION EXPLANATION
+============================================================
+
+Every important autonomous decision must have a reason.
+
+Examples:
+
+YIELD
+
+Reason:
+AMR-01 has a higher-priority reservation.
+
+REROUTE
+
+Reason:
+Aisle C-17 became blocked and alternate route has lower predicted delay.
+
+TASK REASSIGNMENT
+
+Reason:
+AMR-03 failed and AMR-01 has the lowest predicted completion cost.
+
+CHARGE
+
+Reason:
+Current battery is insufficient for task completion plus safety reserve.
+
+DEADLOCK RECOVERY
+
+Reason:
+Wait-for cycle detected among AMR-01, AMR-02 and AMR-03.
+
+Show these explanations in the UI.
+
+============================================================
+AUTONOMOUS DECISION PANEL
+============================================================
+
+Create a panel:
+
+WHY DID THE ROBOT DO THAT?
+
+Example:
+
+AMR-02
+
+CURRENT DECISION:
+YIELD
+
+REASON:
+AMR-01 owns INTERSECTION-I04 reservation.
+
+AMR-01 ETA:
+8.4s
+
+AMR-02 ETA:
+8.9s
+
+REROUTE COST:
++14.2s
+
+WAIT COST:
+3.8s
+
+SELECTED ACTION:
+YIELD FOR 3.8s
+
+This panel should update automatically.
+
+============================================================
+EVENT LEDGER
+============================================================
+
+Create a real event system.
+
+Events:
+
+TASK_CREATED
+TASK_BID
+TASK_ASSIGNED
+TASK_REASSIGNED
+INTENT_BROADCAST
+CONFLICT_PREDICTED
+NEGOTIATION_STARTED
+YIELD_DECISION
+RESERVATION_REQUESTED
+RESERVATION_GRANTED
+RESERVATION_DENIED
+RESERVATION_RELEASED
+AISLE_BLOCKED
+ROUTE_INVALIDATED
+REROUTE_SELECTED
+DEADLOCK_DETECTED
+DEADLOCK_RECOVERY
+DEADLOCK_RESOLVED
+COMMUNICATION_LOST
+COMMUNICATION_RESTORED
+ROBOT_FAILURE
+LOW_BATTERY
+CHARGING_STARTED
+CHARGING_COMPLETED
+OBSTACLE_DETECTED
+SAFETY_STOP
+TASK_COMPLETED
+
+Every event:
+
+timestamp
+robot
+event type
+reason
+resource
+result
+
+============================================================
+PEER NETWORK VISUALIZATION
+============================================================
+
+Show communication links between robots.
+
+Example:
+
+AMR-01 ←→ AMR-02
+AMR-02 ←→ AMR-03
+AMR-03 ←→ AMR-01
+
+Animate messages.
+
+When communication fails:
+
+link becomes stale/offline.
+
+Show:
+
+last heartbeat
+message count
+latency simulation
+state age
+
+============================================================
+FLEET OBSERVABILITY
+============================================================
+
+Top-level fleet metrics:
+
+Total Robots
+Active Robots
+Tasks Active
+Tasks Completed
+Predicted Conflicts
+Active Negotiations
+Deadlocks
+Blocked Aisles
+Communication Health
+Average Battery
+Throughput
+Completion Time
+
+These metrics must come from actual simulation state.
+
+NO HARDCODED NUMBERS.
+
+============================================================
+ROBOT DETAIL PANEL
+============================================================
+
+Clicking an AMR shows:
+
+Robot ID
+State
+Position
+Velocity
+Battery
+Current Task
+Destination
+ETA
+Current Route
+Next Waypoint
+Current Intent
+Current Reservation
+Nearby Robots
+Communication Status
+Health
+Decision History
+
+Also show:
+
+WHY IS THIS ROBOT DOING THIS?
+
+============================================================
+CONFLICT CENTER
+============================================================
+
+Show active conflicts.
+
+For each:
+
+Conflict ID
+Robot A
+Robot B
+Resource
+ETA A
+ETA B
+Priority A
+Priority B
+Risk
+Decision
+Reservation
+Status
+
+Example:
+
+CONFLICT C-021
+
+Resource:
+INTERSECTION-I04
+
+AMR-01:
+ETA 8.4s
+
+AMR-02:
+ETA 8.9s
+
+Decision:
+AMR-02 YIELDS
+
+Status:
+RESOLVED
+
+Collision:
+0
+
+============================================================
+TASK CENTER
+============================================================
+
+Show:
+
+task ID
+order
+SKU
+pickup
+destination
+priority
+assigned robot
+ETA
+status
+bids
+reassignments
+
+Allow the user to create tasks.
+
+But assignment remains autonomous.
+
+============================================================
+ANALYTICS
+============================================================
+
+Create analytics for:
+
+task completion time
+average waiting
+robot utilization
+distance travelled
+reroutes
+deadlocks
+conflicts
+collision count
+throughput
+battery consumption
+communication failures
+recovery time
+
+Charts must update from actual simulation.
+
+============================================================
+STOP-AND-WAIT BASELINE
+============================================================
+
+Implement a true baseline algorithm.
+
+Baseline:
+
+If a robot detects another robot occupying or approaching its route conflict zone:
+
+STOP AND WAIT.
+
+No intelligent negotiation.
+
+Run the SAME seeded scenario under:
+
+MODE A:
+TRADITIONAL STOP-AND-WAIT
+
+MODE B:
+NEXUS DISTRIBUTED COORDINATION
+
+Measure:
+
+total task completion time
+average waiting time
+distance travelled
+tasks completed
+deadlocks
+reroutes
+collisions
+throughput
+energy estimate
+
+Calculate actual improvement.
+
+DO NOT hardcode "20%".
+
+The SIH requirement is a target.
+
+The application must report the measured result honestly.
+
+============================================================
+BENCHMARK UI
+============================================================
+
+Show:
+
+TRADITIONAL STOP-AND-WAIT
+
+Completion:
+actual value
+
+Waiting:
+actual value
+
+Deadlocks:
+actual value
+
+Throughput:
+actual value
+
+versus:
+
+NEXUS-FLEET
+
+Completion:
+actual value
+
+Waiting:
+actual value
+
+Deadlocks:
+actual value
+
+Throughput:
+actual value
+
+Then calculate:
+
+TIME REDUCTION:
+actual percentage
+
+============================================================
+SCENARIO SYSTEM
+============================================================
+
+Create scenario presets.
+
+1. NORMAL WAREHOUSE
+2. HEAD-ON CONFLICT
+3. INTERSECTION CONFLICT
+4. NARROW AISLE CONFLICT
+5. BLOCKED AISLE
+6. DEADLOCK
+7. COMMUNICATION LOSS
+8. ROBOT FAILURE
+9. LOW BATTERY
+10. UNEXPECTED OBSTACLE
+11. HIGH CONGESTION
+12. TASK BURST
+13. MULTI-FAILURE
+14. FULL AUTONOMOUS STRESS TEST
+
+============================================================
+SCENARIO 1 — NORMAL
+============================================================
+
+Multiple robots independently receive tasks.
+
+They pick items.
+
+They navigate.
+
+They deliver to packing.
+
+They receive new tasks.
+
+They continue.
+
+============================================================
+SCENARIO 2 — HEAD-ON CONFLICT
+============================================================
+
+Place two robots on the same narrow aisle moving toward each other.
+
+They detect the predicted conflict.
+
+They communicate.
+
+They negotiate.
+
+One robot yields or reroutes.
+
+No collision.
+
+============================================================
+SCENARIO 3 — INTERSECTION CONFLICT
+============================================================
+
+Two or more robots approach the same intersection.
+
+They calculate ETA.
+
+They negotiate.
+
+One receives reservation.
+
+Others yield.
+
+Traffic continues.
+
+============================================================
+SCENARIO 4 — BLOCKED AISLE
+============================================================
+
+Inject a physical blockage.
+
+Robot detects it.
+
+Broadcasts EDGE_BLOCKED.
+
+Recalculates.
+
+Selects alternate route.
+
+Continues task.
+
+Other robots adapt.
+
+============================================================
+SCENARIO 5 — DEADLOCK
+============================================================
+
+Construct a real deadlock.
+
+Create a wait-for cycle.
+
+Detect it.
+
+Automatically recover.
+
+Show graph before and after.
+
+============================================================
+SCENARIO 6 — COMMUNICATION LOSS
+============================================================
+
+Disable communication for one robot.
+
+Robot continues local operation.
+
+Other robots detect stale state.
+
+Communication returns.
+
+State synchronizes.
+
+Operation resumes.
+
+============================================================
+SCENARIO 7 — ROBOT FAILURE
+============================================================
+
+Fail one robot.
+
+Reassign its tasks.
+
+Update reservations.
+
+Replan.
+
+Continue.
+
+============================================================
+SCENARIO 8 — LOW BATTERY
+============================================================
+
+Set one robot battery to critical.
+
+Robot autonomously determines it cannot safely complete the next task.
+
+Task is reassigned if needed.
+
+Robot goes to charger.
+
+Another robot continues fulfillment.
+
+============================================================
+SCENARIO 9 — UNEXPECTED OBSTACLE
+============================================================
+
+Spawn an unexpected obstacle.
+
+Robot detects it.
+
+Slows/stops.
+
+Replans after obstacle clears.
+
+============================================================
+AUTONOMOUS STRESS TEST
+============================================================
+
+This is the HERO DEMO.
+
+Create:
+
+6 robots
+
+20+ tasks
+
+multiple overlapping routes
+
+multiple intersections
+
+narrow aisles
+
+blocked aisle
+
+communication loss
+
+robot failure
+
+low battery
+
+unexpected obstacle
+
+high traffic
+
+multiple simultaneous conflicts
+
+Then:
+
+START AUTONOMOUS STRESS TEST
+
+After pressing START:
+
+THE USER DOES NOTHING.
+
+The robots must solve everything.
+
+The UI shows:
+
+OBSERVE
+PREDICT
+NEGOTIATE
+ACT
+RECOVER
+
+in real time.
+
+============================================================
+DEMO MODE
+============================================================
+
+Create a cinematic 3–5 minute automated demo.
+
+Sequence:
+
+PHASE 1
+Warehouse starts.
+
+6 robots operate normally.
+
+Tasks are automatically allocated.
+
+PHASE 2
+Two robots approach an intersection.
+
+Conflict predicted.
+
+Intent messages exchanged.
+
+Negotiation begins.
+
+One yields.
+
+Reservation granted.
+
+Traffic continues.
+
+PHASE 3
+Aisle becomes blocked.
+
+Robot detects blockage.
+
+Edge marked blocked.
+
+Alternative route calculated.
+
+Robot reroutes.
+
+Other agents update.
+
+PHASE 4
+One robot loses communication.
+
+It continues locally.
+
+Other robots adapt.
+
+Communication restored.
+
+State synchronized.
+
+PHASE 5
+A real deadlock appears.
+
+Wait-for cycle shown.
+
+Agents detect cycle.
+
+Recovery automatically selected.
+
+Traffic resumes.
+
+PHASE 6
+One robot fails.
+
+Tasks redistributed.
+
+Other robots continue.
+
+PHASE 7
+Low-battery robot goes charging.
+
+Task reassigned.
+
+PHASE 8
+Unexpected obstacle appears.
+
+Safety layer stops robot.
+
+Obstacle clears.
+
+Robot resumes.
+
+PHASE 9
+Benchmark executes.
+
+STOP-AND-WAIT vs NEXUS-FLEET.
+
+Display actual measured metrics.
+
+============================================================
+DEMO CAMERA
+============================================================
+
+During demo mode automatically:
+
+- zoom into conflicts
+- focus on negotiating robots
+- follow rerouting robot
+- show blocked aisle
+- show deadlock graph
+- show communication loss
+- return to fleet overview
+- show benchmark
+
+The camera must enhance understanding of autonomous behavior.
+
+============================================================
+USER CONTROLS
+============================================================
+
+Allowed manual controls:
+
+START
+PAUSE
+RESET
+SIMULATION SPEED
+CAMERA
+CREATE TASK
+INJECT CONFLICT
+BLOCK AISLE
+COMMUNICATION LOSS
+ROBOT FAILURE
+LOW BATTERY
+INJECT OBSTACLE
+RUN BENCHMARK
+RUN STRESS TEST
+RUN DEMO
+
+IMPORTANT:
+
+These are ENVIRONMENT/SIMULATION controls.
+
+They are NOT direct robot decision controls.
+
+Never create buttons:
+
+"Make AMR-01 Yield"
+
+"Make AMR-02 Reroute"
+
+"Resolve Deadlock"
+
+"Assign AMR-01"
+
+"Grant Reservation"
+
+Those decisions must belong to the agents.
+
+============================================================
+3D VISUAL LANGUAGE
+============================================================
+
+The application should look like a real industrial robotics digital twin.
+
+Visual style:
+
+dark industrial warehouse
+professional control room
+high-quality 3D
+subtle grid
+realistic warehouse materials
+technical UI
+clear telemetry
+strong contrast
+minimal unnecessary decoration
+
+Use:
+
+Three.js
+React Three Fiber where useful
+TypeScript
+Next.js
+Tailwind
+shadcn/ui
+Lucide
+
+Do NOT make it look like:
+
+- a gaming UI
+- a generic SaaS dashboard
+- a chatbot
+- a futuristic sci-fi gimmick
+
+============================================================
+MAIN SCREEN
+============================================================
+
+Layout:
+
+TOP BAR
+
+NEXUS-FLEET
+
+System:
+AUTONOMOUS
+
+Fleet:
+6 AMRs
+
+Tasks:
+XX
+
+Conflicts:
+X
+
+Deadlocks:
+X
+
+Battery:
+XX%
+
+Communication:
+XX%
+
+------------------------------------------------
+
+LEFT PANEL
+
+SCENARIOS
+
+Normal
+Head-On Conflict
+Intersection Conflict
+Blocked Aisle
+Deadlock
+Communication Loss
+Robot Failure
+Low Battery
+Obstacle
+Stress Test
+Demo
+
+------------------------------------------------
+
+CENTER
+
+LARGE 3D WAREHOUSE
+
+This must occupy most of the screen.
+
+------------------------------------------------
+
+RIGHT PANEL
+
+Selected Robot
+Conflict
+Decision
+Reservation
+Task
+Battery
+Communication
+
+------------------------------------------------
+
+BOTTOM
+
+LIVE EVENT TIMELINE
+
+============================================================
+LIVE EVENT EXAMPLE
+============================================================
+
+08:41:22.104
+AMR-01
+CONFLICT_PREDICTED
+
+08:41:22.121
+AMR-01
+INTENT_BROADCAST
+
+08:41:22.138
+AMR-02
+INTENT_RECEIVED
+
+08:41:22.151
+AMR-02
+YIELD_DECISION
+
+08:41:22.167
+AMR-01
+RESERVATION_GRANTED
+
+08:41:24.882
+AMR-01
+CORRIDOR_RELEASED
+
+08:41:24.901
+AMR-02
+RESUME
+
+These events must correspond to actual simulation events.
+
+============================================================
+ROBOT PATH VISUALIZATION
+============================================================
+
+For selected robot show:
+
+CURRENT PATH
+PLANNED PATH
+ALTERNATIVE PATH
+RESERVED SEGMENTS
+CONFLICT ZONE
+
+Use different visual treatment for each.
+
+When rerouting:
+
+OLD ROUTE
+→
+NEW ROUTE
+
+must be visible.
+
+============================================================
+RESERVATION VISUALIZATION
+============================================================
+
+Reserved corridor/intersection must visually indicate:
+
+owner
+reservation time
+reservation state
+
+Example:
+
+I-04
+
+RESERVED BY AMR-01
+
+12.4s → 16.7s
+
+AMR-02:
+
+WAITING
+
+============================================================
+AUTONOMY STATUS
+============================================================
+
+Display:
+
+AUTONOMY ACTIVE
+
+Agent count:
+
+6
+
+Peer communication:
+
+ACTIVE
+
+Central decision maker:
+
+NONE
+
+Local planners:
+
+6
+
+This should be derived from architecture state, not fake text.
+
+============================================================
+SIMULATION ENGINE
+============================================================
+
+Create a deterministic simulation engine.
+
+Use:
+
+SimulationClock
+SimulationState
+RobotAgent
+WarehouseGraph
+TaskManager
+PeerNetwork
+ReservationManager
+ConflictEngine
+DeadlockDetector
+RecoveryManager
+SafetySupervisor
+MetricsEngine
+
+Use a seeded simulation.
+
+The same seed should reproduce:
+
+same warehouse
+same initial robot positions
+same tasks
+same disturbances
+
+This allows fair benchmark comparison.
+
+============================================================
+PERFORMANCE
+============================================================
+
+The 3D simulation must remain smooth.
+
+Do not unnecessarily create thousands of React component rerenders.
+
+Separate:
+
+simulation state
+render state
+UI state
+
+Use efficient animation/update patterns.
+
+============================================================
+CODE QUALITY
+============================================================
+
+Use strongly typed TypeScript.
+
+Create modular files.
+
+Do not place the entire system inside one component.
+
+Do not create giant monolithic files.
+
+Separate:
+
+agents
+planning
+communication
+tasks
+simulation
+analytics
+UI
+3D rendering
+
+Use clean interfaces.
+
+============================================================
+IMPORTANT IMPLEMENTATION RULE
+============================================================
+
+DO NOT BUILD THE UI FIRST AND LEAVE THE LOGIC AS PLACEHOLDERS.
+
+Build in this order internally:
+
+1. Simulation clock
+2. Warehouse graph
+3. Robot state
+4. RobotAgent
+5. Movement
+6. Tasks
+7. Local planning
+8. Peer communication
+9. Conflict prediction
+10. Reservations
+11. Negotiation
+12. Deadlock detection
+13. Deadlock recovery
+14. Blockage/rerouting
+15. Battery
+16. Communication failure
+17. Robot failure
+18. Safety layer
+19. Metrics
+20. 3D visualization
+21. UI
+22. Demo mode
+23. Benchmark
+
+The final user experience should make all of these appear integrated.
+
+============================================================
+NO FAKE FEATURES
+============================================================
+
+Never display a feature merely because the UI says it exists.
+
+For example:
+
+If UI says:
+
+"Deadlock detected"
+
+there must actually be a wait-for cycle.
+
+If UI says:
+
+"Rerouting"
+
+the robot must actually change route.
+
+If UI says:
+
+"Negotiating"
+
+agents must actually exchange negotiation state.
+
+If UI says:
+
+"Communication lost"
+
+peer messages must actually stop.
+
+If UI says:
+
+"Task reassigned"
+
+the task's assigned robot must actually change.
+
+If UI says:
+
+"Reservation granted"
+
+the reservation must actually exist.
+
+If UI says:
+
+"Benchmark improvement: 23%"
+
+that value must be calculated.
+
+============================================================
+NO HARDCODED SUCCESS
+============================================================
+
+Do not fake:
+
+zero collisions
+20% improvement
+high throughput
+low latency
+AI accuracy
+deadlock resolution
+
+These are outcomes.
+
+The simulation must calculate them.
+
+============================================================
+ACCEPTANCE TESTS
+============================================================
+
+The project is NOT complete until all of these work.
+
+TEST 1
+
+Start simulation.
+
+At least 3 AMRs operate simultaneously.
+
+PASS if tasks are completed.
+
+TEST 2
+
+Create overlapping routes.
+
+PASS if agents predict conflict before collision.
+
+TEST 3
+
+Two robots reach same intersection.
+
+PASS if they negotiate automatically.
+
+TEST 4
+
+One robot yields.
+
+PASS if another robot receives reservation and proceeds.
+
+TEST 5
+
+Block an aisle.
+
+PASS if robot autonomously reroutes.
+
+TEST 6
+
+Create deadlock.
+
+PASS if wait-for cycle is detected.
+
+TEST 7
+
+Deadlock exists.
+
+PASS if robots autonomously recover.
+
+TEST 8
+
+Disable communication.
+
+PASS if affected robot does not require central controller to remain safe.
+
+TEST 9
+
+Fail robot.
+
+PASS if tasks are redistributed.
+
+TEST 10
+
+Set low battery.
+
+PASS if robot makes charging/reassignment decision.
+
+TEST 11
+
+Inject obstacle.
+
+PASS if safety supervisor reacts.
+
+TEST 12
+
+Run stress test.
+
+PASS if user can press START and then watch autonomous resolution.
+
+TEST 13
+
+Run benchmark.
+
+PASS if same scenario executes in both modes.
+
+TEST 14
+
+Compare benchmark.
+
+PASS if actual metrics are calculated.
+
+TEST 15
+
+Inspect event ledger.
+
+PASS if events correspond to real agent actions.
+
+============================================================
+FINAL DEMO STORY
+============================================================
+
+The final product must communicate this story visually:
+
+"Traditional warehouse fleets depend on centralized coordination and stop-and-wait behavior."
+
+"That creates latency, waiting, congestion and a single point of failure."
+
+"NEXUS-Fleet puts intelligence at the robot."
+
+"Each AMR observes locally."
+
+"Each AMR predicts conflicts."
+
+"Robots communicate directly."
+
+"They negotiate access to shared warehouse resources."
+
+"They reserve corridors."
+
+"They automatically yield."
+
+"They automatically reroute."
+
+"They detect deadlocks."
+
+"They recover from deadlocks."
+
+"They survive communication loss."
+
+"They recover from robot failures."
+
+"They manage battery constraints."
+
+"And the fleet continues operating."
+
+============================================================
+FINAL PRODUCT RULE
+============================================================
+
+The product must feel like:
+
+AN AUTONOMOUS WAREHOUSE THAT CAN SOLVE ITS OWN PROBLEMS.
+
+Not:
+
+A dashboard that tells robots what to do.
+
+Not:
+
+A chatbot controlling robots.
+
+Not:
+
+A prerecorded animation.
+
+Not:
+
+A collection of fake AI cards.
+
+Not:
+
+A static Three.js scene.
+
+The robots must actually make decisions.
+
+The decisions must actually change the simulation.
+
+The simulation must visibly prove the decisions.
+
+The analytics must measure the results.
+
+The UI must explain the decisions.
+
+============================================================
+FINAL COMMAND
+============================================================
+
+BUILD THE COMPLETE END-TO-END NEXUS-FLEET APPLICATION NOW.
+
+Prioritize functional autonomous behavior over decorative UI.
+
+Do not stop at the dashboard.
+
+Do not stop at the 3D warehouse.
+
+Do not stop at robot animation.
+
+Implement the autonomous agents first and connect every visual element to real simulation state.
+
+The final application must allow me to press:
+
+START AUTONOMOUS SIMULATION
+
+and then watch multiple independent AMR agents:
+
+OBSERVE
+PREDICT
+PLAN
+COMMUNICATE
+NEGOTIATE
+RESERVE
+MOVE
+YIELD
+REROUTE
+RECOVER
+VERIFY
+COMPLETE TASKS
+
+without me manually telling individual robots what to do.
+
+That autonomous behavior is the heart of the product.

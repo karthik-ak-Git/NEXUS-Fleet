@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "NEXUS-Fleet"
+description = "A decentralized AMR warehouse simulation for Smart India Hackathon 2026. Independent robot agents coordinate tasks, plan routes, negotiate shared aisles, and recover from operational disturbances."
+version = "1.0.0"
+id = "artifacts/nexus-fleet"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25917
+
+[services.development]
+run = "pnpm --filter @workspace/nexus-fleet run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/nexus-fleet", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/nexus-fleet/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25917"
+BASE_PATH = "/"
