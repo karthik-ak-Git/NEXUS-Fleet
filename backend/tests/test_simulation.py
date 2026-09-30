@@ -86,3 +86,18 @@ def test_delivery_handshake_and_home_return():
 
     assert task_completed is True, "Counter must accept package and complete task"
     assert home_docked is True, "Robot must return to assigned home charging slot N-0-0"
+
+def test_multi_robot_counter_queue_and_waiting_reservations():
+    engine = SimulationEngine(seed=26123, mode="distributed", robot_count=6, task_count=6)
+    engine.start()
+
+    for _ in range(120):
+        engine.step(0.2)
+        snapshot = engine.get_snapshot()
+
+        # Check for zero physical collisions
+        positions = [(r.x, r.y) for r in snapshot.robots if r.health != "FAILED"]
+        for i in range(len(positions)):
+            for j in range(i + 1, len(positions)):
+                dist = ((positions[i][0] - positions[j][0])**2 + (positions[i][1] - positions[j][1])**2)**0.5
+                assert dist >= 0.5, f"Robots {snapshot.robots[i].id} and {snapshot.robots[j].id} physically overlapped (dist={dist:.2f}m)"

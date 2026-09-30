@@ -760,6 +760,36 @@ export class RobotAgent {
     return homeMap[this.state.id] ?? "N-0-0";
   }
 
+  private getCounterQueueTarget(taskDest: string, context: AgentContext): string {
+    if (taskDest !== "N-2-8") return taskDest;
+    const queueSlots = ["N-2-8", "N-2-7", "N-2-6", "N-2-5"];
+    for (const slot of queueSlots) {
+      let owner: string | null = null;
+      for (const r of context.reservations) {
+        if (r.resourceId === slot && r.status === "ACTIVE" && r.endTime > context.now) {
+          if (r.ownerRobot !== this.state.id) {
+            owner = r.ownerRobot;
+            break;
+          }
+        }
+      }
+      if (!owner) {
+        for (const r of context.robots) {
+          if (r.id !== this.state.id && r.health !== "FAILED") {
+            if (r.currentNode === slot || r.currentWaypoint === slot) {
+              owner = r.id;
+              break;
+            }
+          }
+        }
+      }
+      if (!owner || owner === this.state.id) {
+        return slot;
+      }
+    }
+    return queueSlots[queueSlots.length - 1];
+  }
+
   private chooseGoal(context: AgentContext) {
     if (this.chargeTarget) return this.chargeTarget;
     const task = context.tasks.find((item) => item.id === this.state.currentTaskId);
@@ -780,7 +810,11 @@ export class RobotAgent {
         return null;
       }
     }
-    return task.picked ? task.destination : task.pickup;
+    const target = task.picked ? task.destination : task.pickup;
+    if (task.picked && target === "N-2-8") {
+      return this.getCounterQueueTarget(target, context);
+    }
+    return target;
   }
 
   private ensureRoute(goal: string, context: AgentContext) {
@@ -909,18 +943,40 @@ export class RobotAgent {
       this.state.reason = `Edge ${edge?.id ?? "unknown"} is blocked in the local map.`;
       return;
     }
-    const resourceBusy = context.reservations.some(
-      (reservation) =>
-        reservation.status === "ACTIVE" &&
-        reservation.endTime > context.now &&
-        reservation.ownerRobot !== this.state.id &&
-        reservation.resourceId === nextNode,
+    const blockingRobot = context.robots.find(
+      (r) =>
+        r.id !== this.state.id &&
+        r.health !== "FAILED" &&
+        (r.currentNode === nextNode ||
+          r.currentWaypoint === nextNode ||
+          (["WAITING", "YIELDING", "BLOCKED", "PACKAGE_TRANSFER", "DELIVERY_COMPLETED"].includes(String(r.status)) &&
+            (r.currentNode === nextNode || Math.hypot(r.x - destination.x, r.y - destination.y) < 1.25))),
     );
+
+    const resourceBusy =
+      Boolean(blockingRobot) ||
+      context.reservations.some(
+        (reservation) =>
+          reservation.status === "ACTIVE" &&
+          reservation.endTime > context.now &&
+          reservation.ownerRobot !== this.state.id &&
+          reservation.resourceId === nextNode,
+      );
+
     if (resourceBusy) {
+      const blockerId = blockingRobot?.id ?? "traffic";
       this.state.status = "WAITING";
-      this.state.intent = "RESERVATION_WAIT";
+      this.state.intent = "WAITING_FOR_TRAFFIC";
+      this.state.reason = `Waiting for ${nextNode} (occupied by ${blockerId}).`;
       this.state.waitSeconds += dt;
       this.state.velocity = 0;
+      context.reserve(
+        this.state.currentNode,
+        this.state.id,
+        context.now,
+        context.now + 10,
+        this.priorityScore(context.now),
+      );
       return;
     }
     const edgeOccupants = edge.occupancy

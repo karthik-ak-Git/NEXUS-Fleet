@@ -608,6 +608,27 @@ class RobotAgent:
         }
         return home_map.get(self.state.id, "N-0-0")
 
+    def _get_counter_queue_target(self, task_dest: str, context: AgentContext) -> str:
+        if task_dest != "N-2-8":
+            return task_dest
+        queue_slots = ["N-2-8", "N-2-7", "N-2-6", "N-2-5"]
+        for slot in queue_slots:
+            owner = None
+            for r in context.reservations:
+                if r.resourceId == slot and r.status == "ACTIVE" and r.endTime > context.now:
+                    if r.ownerRobot != self.state.id:
+                        owner = r.ownerRobot
+                        break
+            if not owner:
+                for r in context.robots:
+                    if r.id != self.state.id and r.health != "FAILED":
+                        if r.currentNode == slot or r.currentWaypoint == slot:
+                            owner = r.id
+                            break
+            if not owner or owner == self.state.id:
+                return slot
+        return queue_slots[-1]
+
     def _choose_goal(self, context: AgentContext) -> Optional[str]:
         if self.charge_target:
             return self.charge_target
@@ -626,7 +647,10 @@ class RobotAgent:
                     self.state.reason = f"Docked at home charging slot {home_node}."
                 self.state.destination = None
                 return None
-        return task.destination if task.picked else task.pickup
+        target = task.destination if task.picked else task.pickup
+        if task.picked and target == "N-2-8":
+            return self._get_counter_queue_target(target, context)
+        return target
 
     def _ensure_route(self, goal: str, context: AgentContext):
         next_n = self.state.route[1] if len(self.state.route) > 1 else None
@@ -730,15 +754,36 @@ class RobotAgent:
             self.state.reason = f"Edge {edge.id if edge else 'unknown'} blocked in local map."
             return
 
-        resource_busy = any(
+        blocking_robot = next(
+            (
+                r for r in context.robots
+                if r.id != self.state.id and r.health != "FAILED" and (
+                    r.currentNode == next_node or
+                    r.currentWaypoint == next_node or
+                    (r.status in ("WAITING", "YIELDING", "BLOCKED", "PACKAGE_TRANSFER", "DELIVERY_COMPLETED") and (
+                        r.currentNode == next_node or math.hypot(r.x - destination.x, r.y - destination.y) < 1.25
+                    ))
+                )
+            ),
+            None
+        )
+
+        resource_busy = blocking_robot is not None or any(
             r.status == "ACTIVE" and r.endTime > context.now and r.ownerRobot != self.state.id and r.resourceId == next_node
             for r in context.reservations
         )
         if resource_busy:
+            blocker_id = blocking_robot.id if blocking_robot else "traffic"
             self.state.status = "WAITING"
-            self.state.intent = "RESERVATION_WAIT"
+            self.state.intent = "WAITING_FOR_TRAFFIC"
+            self.state.reason = f"Waiting for {next_node} (occupied by {blocker_id})."
             self.state.waitSeconds += dt
             self.state.velocity = 0.0
+            # Reserve current node so following robots queue behind us safely!
+            context.reserve(
+                self.state.currentNode, self.state.id, context.now,
+                context.now + 10.0, self._priority_score(context.now)
+            )
             return
 
         edge_occupants = [
