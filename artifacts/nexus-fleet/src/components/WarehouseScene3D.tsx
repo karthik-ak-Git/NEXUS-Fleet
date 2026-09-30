@@ -267,6 +267,49 @@ function DockingZoneMat({ position }: { position: [number, number, number] }) {
   );
 }
 
+function ChargingDocks3D({ robots }: { robots: Datum[] }) {
+  const robotMap = useMemo(() => new Map(robots.map((r) => [r.id, r])), [robots]);
+  const slots = GLOBAL_WAREHOUSE_LAYOUT.chargingSlots;
+
+  return (
+    <group>
+      {slots.map((slot) => {
+        const assignedRobot = robotMap.get(slot.assignedRobotId);
+        const isCharging = assignedRobot && (String(assignedRobot.status ?? assignedRobot.intent).includes("CHARGE") || String(assignedRobot.intent).includes("HOME"));
+        const isOccupied = assignedRobot && (isCharging || assignedRobot.status === "IDLE");
+
+        return (
+          <group key={slot.id} position={[slot.x, 0.01, slot.y]}>
+            {/* Dock Base Plate */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+              <planeGeometry args={[1.5, 1.2]} />
+              <meshStandardMaterial color={isCharging ? "#14532d" : isOccupied ? "#1e293b" : "#334155"} roughness={0.65} />
+            </mesh>
+            {/* Charging Contact Strip */}
+            <mesh position={[0, 0.02, -0.4]} rotation={[-Math.PI / 2, 0, 0]}>
+              <planeGeometry args={[1.3, 0.2]} />
+              <meshBasicMaterial color={isCharging ? "#22c55e" : "#eab308"} />
+            </mesh>
+            {/* Dock Pillar Posts */}
+            {[-0.6, 0.6].map((xOffset) => (
+              <mesh key={xOffset} position={[xOffset, 0.3, -0.45]} castShadow>
+                <boxGeometry args={[0.1, 0.6, 0.1]} />
+                <meshStandardMaterial color="#475569" metalness={0.7} />
+              </mesh>
+            ))}
+            {/* Status LED Beacon */}
+            <mesh position={[0, 0.65, -0.45]}>
+              <sphereGeometry args={[0.07, 12, 12]} />
+              <meshBasicMaterial color={isCharging ? "#22c55e" : isOccupied ? "#f59e0b" : "#38bdf8"} />
+            </mesh>
+            <LabelSprite position={[0, 0.95, -0.45]} text={`${slot.id} · ${slot.assignedRobotId}`} tone="station" size={[1.5, 0.3]} />
+          </group>
+        );
+      })}
+    </group>
+  );
+}
+
 function DebugGraphOverlay({ nodes, edges, debugMode }: { nodes: Map<string, Datum>; edges: Datum[]; debugMode: boolean }) {
   if (!debugMode) return null;
   const nodeList = Array.from(nodes.values());
@@ -428,6 +471,48 @@ function Robot({ robot, nodes, selected, onSelect, debugMode }: {
         <mesh position={[-0.42, 0.3, 0]} castShadow>
           <cylinderGeometry args={[0.035, 0.035, 0.06, 14]} />
           <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.6} />
+        </mesh>
+
+        {/* Front Camera Lens Module */}
+        <group position={[0.59, 0.12, 0]}>
+          <mesh castShadow>
+            <boxGeometry args={[0.06, 0.1, 0.16]} />
+            <meshStandardMaterial color="#1f2926" metalness={0.8} roughness={0.2} />
+          </mesh>
+          <mesh position={[0.035, 0, 0]} rotation={[0, Math.PI / 2, 0]}>
+            <cylinderGeometry args={[0.03, 0.03, 0.02, 12]} />
+            <meshBasicMaterial color="#38bdf8" />
+          </mesh>
+        </group>
+
+        {/* Rear Camera Lens Module */}
+        <group position={[-0.59, 0.12, 0]}>
+          <mesh castShadow>
+            <boxGeometry args={[0.06, 0.1, 0.16]} />
+            <meshStandardMaterial color="#1f2926" metalness={0.8} roughness={0.2} />
+          </mesh>
+          <mesh position={[-0.035, 0, 0]} rotation={[0, -Math.PI / 2, 0]}>
+            <cylinderGeometry args={[0.03, 0.03, 0.02, 12]} />
+            <meshBasicMaterial color="#38bdf8" />
+          </mesh>
+        </group>
+
+        {/* Top Mast Camera Sensor Module */}
+        <group position={[0, 1.62, 0]}>
+          <mesh castShadow>
+            <boxGeometry args={[0.12, 0.08, 0.12]} />
+            <meshStandardMaterial color="#1f2926" metalness={0.85} roughness={0.15} />
+          </mesh>
+          <mesh position={[0, 0.05, 0]}>
+            <sphereGeometry args={[0.035, 12, 12]} />
+            <meshBasicMaterial color="#38bdf8" />
+          </mesh>
+        </group>
+
+        {/* Rear Magnetic Charging Interface Connector */}
+        <mesh position={[-0.59, -0.05, 0]} castShadow>
+          <boxGeometry args={[0.04, 0.12, 0.32]} />
+          <meshStandardMaterial color="#eab308" metalness={0.9} roughness={0.1} />
         </mesh>
 
         {/* 4 Wheels at Base Chassis */}
@@ -765,6 +850,7 @@ export function WarehouseScene3D({
           <Floor />
           <WarehouseRacks debugMode={debugMode} />
           <DockingZoneMat position={[16, 0, -2]} />
+          <ChargingDocks3D robots={robots} />
           <DebugGraphOverlay nodes={nodeMap} edges={edges} debugMode={debugMode} />
           <ResourceOverlays edges={edges} nodes={nodeMap} reservations={reservations} obstacles={obstacles} />
           <InterlinkConnections robots={robots} />

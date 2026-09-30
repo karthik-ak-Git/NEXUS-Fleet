@@ -241,14 +241,18 @@ export function buildWarehouseLayout(): WarehouseLayout {
     }
   }
 
-  // 6 Dedicated Home Charging Slots
+  // 10 Dedicated Home Charging Slots for AMR-01 .. AMR-10
   const chargingSlots: ChargingSlot[] = [
     { id: "C-01", label: "CHARGER 01", nodeId: "N-0-0", assignedRobotId: "AMR-01", x: -16, y: -10 },
     { id: "C-02", label: "CHARGER 02", nodeId: "N-0-1", assignedRobotId: "AMR-02", x: -12, y: -10 },
     { id: "C-03", label: "CHARGER 03", nodeId: "N-0-2", assignedRobotId: "AMR-03", x: -8,  y: -10 },
-    { id: "C-04", label: "CHARGER 04", nodeId: "N-5-6", assignedRobotId: "AMR-04", x: 8,   y: 10 },
-    { id: "C-05", label: "CHARGER 05", nodeId: "N-5-7", assignedRobotId: "AMR-05", x: 12,  y: 10 },
-    { id: "C-06", label: "CHARGER 06", nodeId: "N-5-8", assignedRobotId: "AMR-06", x: 16,  y: 10 },
+    { id: "C-04", label: "CHARGER 04", nodeId: "N-0-3", assignedRobotId: "AMR-04", x: -4,  y: -10 },
+    { id: "C-05", label: "CHARGER 05", nodeId: "N-0-4", assignedRobotId: "AMR-05", x: 0,   y: -10 },
+    { id: "C-06", label: "CHARGER 06", nodeId: "N-5-4", assignedRobotId: "AMR-06", x: 0,   y: 10 },
+    { id: "C-07", label: "CHARGER 07", nodeId: "N-5-5", assignedRobotId: "AMR-07", x: 4,   y: 10 },
+    { id: "C-08", label: "CHARGER 08", nodeId: "N-5-6", assignedRobotId: "AMR-08", x: 8,   y: 10 },
+    { id: "C-09", label: "CHARGER 09", nodeId: "N-5-7", assignedRobotId: "AMR-09", x: 12,  y: 10 },
+    { id: "C-10", label: "CHARGER 10", nodeId: "N-5-8", assignedRobotId: "AMR-10", x: 16,  y: 10 },
   ];
 
   // Station Locations

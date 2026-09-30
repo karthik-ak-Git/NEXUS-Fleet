@@ -118,7 +118,7 @@ PACKING_NODE = node_id(2, 8)
 COUNTER_QUEUE_NODES = [node_id(2, 8), node_id(2, 7), node_id(2, 6), node_id(2, 5)]
 CHARGER_NODES = [
     node_id(0, 0), node_id(0, 1), node_id(0, 2), node_id(0, 3), node_id(0, 4),
-    node_id(0, 5), node_id(0, 6), node_id(0, 7), node_id(0, 8), node_id(5, 0)
+    node_id(5, 4), node_id(5, 5), node_id(5, 6), node_id(5, 7), node_id(5, 8)
 ]
 
 def node_by_id(nodes: List[WarehouseNodeSchema], node_id_str: Optional[str]) -> Optional[WarehouseNodeSchema]:
