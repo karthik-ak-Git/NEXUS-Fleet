@@ -1,6 +1,6 @@
-import { Html, Line, OrbitControls } from "@react-three/drei";
+import { Line, OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { useMemo, useRef } from "react";
+import { Component, useEffect, useMemo, useRef, type ReactNode } from "react";
 import * as THREE from "three";
 
 type Datum = Record<string, any>;
@@ -12,6 +12,79 @@ const robotColor = (status: unknown) => {
   if (/complete|idle/.test(text)) return "#7a9183";
   return "#1d927d";
 };
+
+class SceneErrorBoundary extends Component<
+  { children: ReactNode; fallback: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  render() {
+    return this.state.failed ? this.props.fallback : this.props.children;
+  }
+}
+
+function LabelSprite({
+  position,
+  text,
+  tone = "neutral",
+  size = [1.8, 0.42],
+}: {
+  position: [number, number, number];
+  text: string;
+  tone?: "neutral" | "station" | "robot" | "blocked" | "reservation";
+  size?: [number, number];
+}) {
+  const texture = useMemo(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 512;
+    canvas.height = 128;
+    const context = canvas.getContext("2d");
+    if (context) {
+      const palette = {
+        neutral: { bg: "#f4f2e8", fg: "#42564d", border: "#9eaa9d" },
+        station: { bg: "#31594f", fg: "#f4f0dd", border: "#6e9080" },
+        robot: { bg: "#f4f2e8", fg: "#314b43", border: "#aeb8a8" },
+        blocked: { bg: "#f7e9db", fg: "#973f36", border: "#c98977" },
+        reservation: { bg: "#f6f0df", fg: "#725920", border: "#cbb579" },
+      }[tone];
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = palette.bg;
+      context.strokeStyle = palette.border;
+      context.lineWidth = 5;
+      context.beginPath();
+      context.roundRect(8, 8, 496, 112, 8);
+      context.fill();
+      context.stroke();
+      context.fillStyle = palette.fg;
+      context.font = tone === "robot" ? "600 31px monospace" : "600 28px monospace";
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      context.fillText(text.slice(0, 30), 256, 64);
+    }
+    const map = new THREE.CanvasTexture(canvas);
+    map.colorSpace = THREE.SRGBColorSpace;
+    map.needsUpdate = true;
+    return map;
+  }, [text, tone]);
+  useEffect(() => () => texture.dispose(), [texture]);
+
+  return (
+    <sprite position={position} scale={[size[0], size[1], 1]} renderOrder={10}>
+      <spriteMaterial
+        map={texture}
+        transparent
+        depthTest={false}
+        depthWrite={false}
+        toneMapped={false}
+      />
+    </sprite>
+  );
+}
 
 function Floor() {
   return (
@@ -79,9 +152,7 @@ function Rack({ x, z, id }: { x: number; z: number; id: string }) {
           ))}
         </group>
       ))}
-      <Html position={[0, 2.3, 0]} center distanceFactor={18} transform>
-        <div className="scene-rack-label">{id}</div>
-      </Html>
+      <LabelSprite position={[0, 2.3, 0]} text={id} size={[0.9, 0.22]} />
     </group>
   );
 }
@@ -143,9 +214,7 @@ function Station({ position, label, tint }: { position: [number, number, number]
         <boxGeometry args={[1.6, 1.35, 0.12]} />
         <meshStandardMaterial color="#38534e" roughness={0.55} metalness={0.18} />
       </mesh>
-      <Html position={[0, 1.75, 0]} center distanceFactor={15}>
-        <div className="scene-station-label">{label}</div>
-      </Html>
+      <LabelSprite position={[0, 1.75, 0]} text={label} tone="station" size={[1.3, 0.3]} />
     </group>
   );
 }
@@ -212,12 +281,12 @@ function Robot({ robot, nodes, selected, onSelect }: {
           )),
         )}
       </group>
-      <Html position={[robot.x, 0.88, robot.y]} center distanceFactor={17} occlude={false}>
-        <div className={`scene-robot-label ${selected ? "selected" : ""}`}>
-          <strong>{robot.id}</strong>
-          <span>{String(robot.status ?? "IDLE").replaceAll("_", " ")}</span>
-        </div>
-      </Html>
+      <LabelSprite
+        position={[robot.x, 0.96, robot.y]}
+        text={`${robot.id} · ${String(robot.status ?? "IDLE").replaceAll("_", " ")}`}
+        tone="robot"
+        size={[2.1, 0.44]}
+      />
     </group>
   );
 }
@@ -251,9 +320,7 @@ function ResourceOverlays({ edges, nodes, reservations, obstacles }: {
                 <meshStandardMaterial color="#e3c066" />
               </mesh>
             </group>
-            <Html position={midpoint} center distanceFactor={14}>
-              <div className="scene-blocked-label">BLOCKED · {edge.id}</div>
-            </Html>
+            <LabelSprite position={midpoint} text={`BLOCKED · ${edge.id}`} tone="blocked" size={[1.8, 0.38]} />
           </group>
         );
       })}
@@ -266,9 +333,12 @@ function ResourceOverlays({ edges, nodes, reservations, obstacles }: {
               <ringGeometry args={[0.58, 0.66, 40]} />
               <meshBasicMaterial color="#c49436" transparent opacity={0.84} />
             </mesh>
-            <Html position={[node.x, 0.4, node.y]} center distanceFactor={14}>
-              <div className="scene-reservation-label">{reservation.ownerRobot} · RESERVED</div>
-            </Html>
+            <LabelSprite
+              position={[node.x, 0.4, node.y]}
+              text={`${reservation.ownerRobot} · RESERVED`}
+              tone="reservation"
+              size={[1.8, 0.34]}
+            />
           </group>
         );
       })}
@@ -321,6 +391,98 @@ function CameraRig({ selectedRobot, follow, topView, resetToken }: {
   return null;
 }
 
+function WarehousePlanFallback({
+  robots,
+  nodes,
+  edges,
+  obstacles,
+  reservations,
+  selectedId,
+  onSelect,
+}: {
+  robots: Datum[];
+  nodes: Datum[];
+  edges: Datum[];
+  obstacles: Datum[];
+  reservations: Datum[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+}) {
+  const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+  const project = (x: number, y: number) => ({
+    x: 42 + ((x + 14) / 28) * 816,
+    y: 28 + ((y + 10) / 20) * 444,
+  });
+  const racks = [-6, -1.5, 3, 7.5].flatMap((x) =>
+    [-6.1, -1.55, 3.1].map((y) => ({ x, y })),
+  );
+
+  return (
+    <div className="warehouse-plan-fallback">
+      <svg viewBox="0 0 900 500" role="img" aria-label="Live warehouse floor plan fallback">
+        <rect width="900" height="500" fill="#d9d8cd" />
+        <rect x="25" y="20" width="850" height="460" fill="#e4e2d5" stroke="#8e9a8d" strokeDasharray="4 5" />
+        {[-8, -4, 0, 4, 8].map((y) => {
+          const point = project(0, y);
+          return <line key={y} x1="40" y1={point.y} x2="860" y2={point.y} stroke="#bdc0b3" strokeDasharray="6 7" />;
+        })}
+        {edges.map((edge) => {
+          const from = nodeMap.get(edge.from);
+          const to = nodeMap.get(edge.to);
+          if (!from || !to) return null;
+          const a = project(from.x, from.y);
+          const b = project(to.x, to.y);
+          return <line key={edge.id} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={edge.blocked ? "#b84940" : "#aeb7aa"} strokeWidth={edge.blocked ? 7 : 1} strokeDasharray={edge.blocked ? "5 4" : undefined} opacity={edge.blocked ? 0.9 : 0.55} />;
+        })}
+        {racks.map((rack, index) => {
+          const p = project(rack.x, rack.y);
+          return (
+            <g key={`rack-${index}`}>
+              <rect x={p.x - 38} y={p.y - 9} width="76" height="18" rx="2" fill="#70857a" stroke="#435c58" />
+              <path d={`M${p.x - 22} ${p.y - 8}V${p.y + 8}M${p.x} ${p.y - 8}V${p.y + 8}M${p.x + 22} ${p.y - 8}V${p.y + 8}`} stroke="#d0b372" strokeWidth="2" />
+              <text x={p.x} y={p.y + 2.5} textAnchor="middle" fill="#f0ecda" fontSize="7" fontFamily="monospace">R-{String(index + 1).padStart(2, "0")}</text>
+            </g>
+          );
+        })}
+        <g>
+          <rect x="35" y="220" width="64" height="46" fill="#b69858" opacity=".88" />
+          <text x="67" y="246" textAnchor="middle" fill="#fff6df" fontSize="8" fontFamily="monospace">INBOUND</text>
+          <rect x="801" y="220" width="64" height="46" fill="#4e8277" opacity=".92" />
+          <text x="833" y="246" textAnchor="middle" fill="#fff6df" fontSize="8" fontFamily="monospace">PACK / OUT</text>
+        </g>
+        {reservations.map((reservation) => {
+          const node = nodeMap.get(reservation.resourceId);
+          if (!node) return null;
+          const p = project(node.x, node.y);
+          return <circle key={reservation.id} cx={p.x} cy={p.y} r="12" fill="none" stroke="#b88a2f" strokeWidth="2" strokeDasharray="3 3" />;
+        })}
+        {obstacles.map((obstacle) => {
+          const p = project(obstacle.x, obstacle.y);
+          return <g key={obstacle.id}><rect x={p.x - 8} y={p.y - 8} width="16" height="16" fill="#b6493f" /><path d={`M${p.x - 5} ${p.y - 5}L${p.x + 5} ${p.y + 5}M${p.x + 5} ${p.y - 5}L${p.x - 5} ${p.y + 5}`} stroke="white" strokeWidth="2" /></g>;
+        })}
+        {robots.map((robot) => {
+          const p = project(robot.x, robot.y);
+          const color = robotColor(robot.status);
+          const route = (Array.isArray(robot.route) ? robot.route : [])
+            .map((id: string) => nodeMap.get(id))
+            .filter(Boolean)
+            .map((node: Datum) => project(node.x, node.y));
+          const points = [p, ...route].map((point) => `${point.x},${point.y}`).join(" ");
+          return (
+            <g key={robot.id} onClick={() => onSelect(robot.id)} style={{ cursor: "pointer" }}>
+              {route.length > 0 && <polyline points={points} fill="none" stroke={robot.id === selectedId ? "#b68125" : "#168571"} strokeWidth="2" strokeDasharray="5 4" />}
+              <circle cx={p.x} cy={p.y} r={robot.id === selectedId ? 12 : 9} fill={color} stroke="#f7f4e9" strokeWidth="2" />
+              <text x={p.x} y={p.y - 14} textAnchor="middle" fill="#304840" stroke="#eceadd" strokeWidth="3" paintOrder="stroke" fontSize="9" fontWeight="bold" fontFamily="monospace">{robot.id}</text>
+              <path d="M0 -5L4 3H-4Z" fill="#fff6df" transform={`translate(${p.x} ${p.y}) rotate(${-(Number(robot.heading) * 180 / Math.PI)})`} />
+            </g>
+          );
+        })}
+      </svg>
+      <div className="scene-fallback-banner">LIVE FLOOR PLAN · 3D GRAPHICS UNAVAILABLE</div>
+    </div>
+  );
+}
+
 export function WarehouseScene3D({
   robots,
   nodes,
@@ -349,50 +511,63 @@ export function WarehouseScene3D({
     [nodes],
   );
   const selected = robots.find((robot) => robot.id === selectedId) ?? null;
+  const fallback = (
+    <WarehousePlanFallback
+      robots={robots}
+      nodes={nodes}
+      edges={edges}
+      obstacles={obstacles}
+      reservations={reservations}
+      selectedId={selectedId}
+      onSelect={onSelect}
+    />
+  );
 
   return (
     <div className="warehouse-3d">
-      <Canvas shadows dpr={[1, 1.65]} camera={{ position: [23, 23, 25], fov: 39, near: 0.1, far: 140 }}>
-        <color attach="background" args={["#d5d4c8"]} />
-        <fog attach="fog" args={["#d5d4c8", 34, 75]} />
-        <ambientLight intensity={1.45} />
-        <hemisphereLight args={["#f5e9c9", "#64756b", 1.1]} />
-        <directionalLight
-          position={[12, 20, 13]}
-          intensity={2}
-          castShadow
-          shadow-mapSize-width={1024}
-          shadow-mapSize-height={1024}
-          shadow-camera-left={-24}
-          shadow-camera-right={24}
-          shadow-camera-top={20}
-          shadow-camera-bottom={-20}
-        />
-        <Floor />
-        <WarehouseRacks />
-        <ResourceOverlays edges={edges} nodes={nodeMap} reservations={reservations} obstacles={obstacles} />
-        {robots.map((robot) => (
-          <Robot
-            key={robot.id}
-            robot={robot}
-            nodes={nodeMap}
-            selected={robot.id === selectedId}
-            onSelect={() => onSelect(robot.id)}
+      <SceneErrorBoundary fallback={fallback}>
+        <Canvas shadows="basic" dpr={[1, 1.65]} camera={{ position: [23, 23, 25], fov: 39, near: 0.1, far: 140 }}>
+          <color attach="background" args={["#d5d4c8"]} />
+          <fog attach="fog" args={["#d5d4c8", 34, 75]} />
+          <ambientLight intensity={1.45} />
+          <hemisphereLight args={["#f5e9c9", "#64756b", 1.1]} />
+          <directionalLight
+            position={[12, 20, 13]}
+            intensity={2}
+            castShadow
+            shadow-mapSize-width={1024}
+            shadow-mapSize-height={1024}
+            shadow-camera-left={-24}
+            shadow-camera-right={24}
+            shadow-camera-top={20}
+            shadow-camera-bottom={-20}
           />
-        ))}
-        <CameraRig selectedRobot={selected} follow={follow} topView={topView} resetToken={resetToken} />
-        <OrbitControls
-          makeDefault
-          enableDamping
-          dampingFactor={0.08}
-          minDistance={13}
-          maxDistance={60}
-          maxPolarAngle={Math.PI / 2.05}
-          target={[0, 0, 0]}
-        />
-      </Canvas>
-      <div className="scene-hud scene-hud-north">N ↑</div>
-      <div className="scene-hud scene-hud-scale">WAREHOUSE SCALE · 1 UNIT / 1 M</div>
+          <Floor />
+          <WarehouseRacks />
+          <ResourceOverlays edges={edges} nodes={nodeMap} reservations={reservations} obstacles={obstacles} />
+          {robots.map((robot) => (
+            <Robot
+              key={robot.id}
+              robot={robot}
+              nodes={nodeMap}
+              selected={robot.id === selectedId}
+              onSelect={() => onSelect(robot.id)}
+            />
+          ))}
+          <CameraRig selectedRobot={selected} follow={follow} topView={topView} resetToken={resetToken} />
+          <OrbitControls
+            makeDefault
+            enableDamping
+            dampingFactor={0.08}
+            minDistance={13}
+            maxDistance={60}
+            maxPolarAngle={Math.PI / 2.05}
+            target={[0, 0, 0]}
+          />
+        </Canvas>
+        <div className="scene-hud scene-hud-north">N ↑</div>
+        <div className="scene-hud scene-hud-scale">WAREHOUSE SCALE · 1 UNIT / 1 M</div>
+      </SceneErrorBoundary>
     </div>
   );
 }

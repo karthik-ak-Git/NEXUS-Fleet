@@ -1,0 +1,1 @@
+- [Warehouse rendering fallback](warehouse-rendering.md) — keep scene labels in R3F and show the live SVG floor plan when WebGL initialization fails.

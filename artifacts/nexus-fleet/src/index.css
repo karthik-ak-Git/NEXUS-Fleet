@@ -632,6 +632,9 @@ button { cursor: pointer; }
 .scene-robot-label.selected { color: #765616; border-color: rgba(182, 136, 45, .65); }
 .scene-blocked-label { color: #913e36; border-color: #d5aaa0; background: rgba(252, 239, 222, .94); }
 .scene-reservation-label { color: #755c24; border-color: #ddcb9d; background: rgba(249, 242, 220, .91); font-size: 6px; }
+.warehouse-plan-fallback { position: relative; width: 100%; height: 100%; min-height: 314px; overflow: hidden; background: #d9d8cd; }
+.warehouse-plan-fallback svg { display: block; width: 100%; height: 100%; min-height: 314px; }
+.scene-fallback-banner { position: absolute; top: 10px; right: 11px; padding: 5px 7px; color: #66766b; border: 1px solid rgba(95, 116, 103, .35); background: rgba(244, 242, 229, .9); font: 7px 'IBM Plex Mono', monospace; letter-spacing: .1em; pointer-events: none; }
 
 @media (max-width: 720px) {
   .map-heading-tools { gap: 5px; }
