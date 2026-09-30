@@ -412,8 +412,20 @@ class RobotAgent:
             self.state.waitingFor = None
             if self.state.status in ("YIELDING", "WAITING"):
                 self.state.status = "MOVING"
-                self.state.reason = "Conflict zone cleared; local route safe to resume."
-                self.record_decision(now, "RESUME", self.state.reason)
+        # Physical 2D proximity safety check: yield if within 1.35m of another active robot with higher priority
+        for other in context.robots:
+            if other.id == self.state.id or other.health == "FAILED":
+                continue
+            dist = math.hypot(self.state.x - other.x, self.state.y - other.y)
+            if dist < 1.35:
+                own_prio = self._priority_score(now)
+                other_prio = getattr(other, "taskPriority", 0.0) or 0.0
+                wins = own_prio > other_prio or (abs(own_prio - other_prio) < 0.0001 and self.state.id < other.id)
+                if not wins:
+                    self.state.status = "YIELDING"
+                    self.state.velocity = 0.0
+                    self.state.reason = f"Safety clearance: yielding right-of-way to higher-priority {other.id} ({dist:.2f}m)."
+                    break
 
         if self.state.status not in ("YIELDING", "WAITING"):
             self._advance(dt, next_node, context)

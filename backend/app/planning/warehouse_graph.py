@@ -91,16 +91,21 @@ def create_warehouse() -> Tuple[List[WarehouseNodeSchema], List[WarehouseEdgeSch
 def get_rack_locations() -> List[Dict[str, str]]:
     rack_nodes = []
     letters = ["A", "B", "C", "D", "E"]
+    grocery_items = [
+        "ORGANIC_APPLES", "FRESH_MILK", "WHOLE_WHEAT_BREAD", "BASMATI_RICE",
+        "OLIVE_OIL", "ALMOND_MILK", "GREEK_YOGURT", "ROASTED_COFFEE",
+        "ORANGE_JUICE", "CHOCOLATE_BAR", "GREEN_TEA", "PASTA_PACK"
+    ]
     index = 0
-    for row in range(len(YS)):
+    for row in [1, 2, 3]:
         for col in [1, 2, 4, 5]:
             letter = letters[index // 4]
             number = str((index % 4) + 11).zfill(2)
-            color = ["RED", "BLUE", "GREY", "AMBER"][index % 4]
+            item = grocery_items[index % len(grocery_items)]
             rack_nodes.append({
                 "id": node_id(row, col),
                 "label": f"Rack {letter}-{number}",
-                "sku": f"SKU-{letter}{number}-{color}"
+                "sku": f"SKU-{letter}{number}-{item}"
             })
             index += 1
     return rack_nodes

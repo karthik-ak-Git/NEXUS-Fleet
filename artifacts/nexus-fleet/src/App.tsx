@@ -5,19 +5,19 @@ import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
 import { Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
+import { LandingPage } from './pages/LandingPage';
+import { DocsPage } from './pages/DocsPage';
 import { FleetConsole } from './components/FleetConsole';
 
 const queryClient = new QueryClient();
-
-function Home() {
-  return <FleetConsole />;
-}
 
 function Router() {
   return (
     <RoutedErrorBoundary>
       <Switch>
-        <Route path="/" component={Home} />
+        <Route path="/" component={LandingPage} />
+        <Route path="/docs" component={DocsPage} />
+        <Route path="/console" component={FleetConsole} />
         <Route component={NotFound} />
       </Switch>
     </RoutedErrorBoundary>

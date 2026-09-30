@@ -121,14 +121,14 @@ export function useSimulation() {
     }
   }, [refresh]);
 
-  const createTask = useCallback(() => {
-    engineRef.current!.createTask();
+  const createTask = useCallback((pickup?: string, sku?: string, assignedRobotId?: string) => {
+    engineRef.current!.createTask(pickup, sku);
     refresh();
     if (isConnectedRef.current) {
       fetch(`${BACKEND_API_URL}/tasks`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ priority: 0.8 })
+        body: JSON.stringify({ pickup, priority: 0.85 })
       }).catch(() => {});
     }
   }, [refresh]);

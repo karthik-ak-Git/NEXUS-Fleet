@@ -105,16 +105,22 @@ export function edgeBetween(
 
 export function getRackLocations() {
   const rackNodes: Array<{ id: string; label: string; sku: string }> = [];
-  const letters = ["A", "B", "C", "D"];
+  const letters = ["A", "B", "C", "D", "E"];
+  const groceryItems = [
+    "ORGANIC_APPLES", "FRESH_MILK", "WHOLE_WHEAT_BREAD", "BASMATI_RICE",
+    "OLIVE_OIL", "ALMOND_MILK", "GREEK_YOGURT", "ROASTED_COFFEE",
+    "ORANGE_JUICE", "CHOCOLATE_BAR", "GREEN_TEA", "PASTA_PACK"
+  ];
   let index = 0;
-  for (let row = 0; row < YS.length; row += 1) {
+  for (const row of [1, 2, 3]) {
     for (const col of [1, 2, 4, 5]) {
       const letter = letters[Math.floor(index / 4)];
       const number = String((index % 4) + 11).padStart(2, "0");
+      const item = groceryItems[index % groceryItems.length];
       rackNodes.push({
         id: nodeId(row, col),
         label: `Rack ${letter}-${number}`,
-        sku: `SKU-${letter}${number}-${["RED", "BLUE", "GREY", "AMBER"][index % 4]}`,
+        sku: `SKU-${letter}${number}-${item}`,
       });
       index += 1;
     }

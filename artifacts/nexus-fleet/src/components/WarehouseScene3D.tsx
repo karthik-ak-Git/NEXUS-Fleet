@@ -232,18 +232,27 @@ function Robot({ robot, nodes, selected, onSelect }: {
     .map((node: Datum) => [node.x, 0.18, node.y] as [number, number, number]);
   const route = [[robot.x, 0.18, robot.y] as [number, number, number], ...routePoints];
 
-  // Dynamic vertical carriage height animation based on intent & status
-  const isPickingOrDelivering =
+  // Dynamic vertical carriage height & forklift arm extension
+  const isPickingPhase =
     robot.intent === "PICK" ||
+    String(robot.status).includes("PICKING") ||
+    (String(robot.status).includes("NEGOTIATING") && robot.intent === "PICK");
+
+  const isDeliveringPhase =
     robot.intent === "DELIVER" ||
-    String(robot.status).includes("MOVING") ||
-    String(robot.status).includes("WAITING");
+    String(robot.status).includes("DELIVERING");
 
-  const liftHeight = isPickingOrDelivering
-    ? 0.45 + Math.abs(Math.sin((robot.x * 1.5 + robot.y * 1.5))) * 0.75
-    : 0.25;
+  const liftHeight = isPickingPhase
+    ? 0.55 + Math.abs(Math.sin(Number(robot.x ?? 0) * 2.0)) * 0.65
+    : isDeliveringPhase
+      ? 0.35
+      : 0.22;
 
-  const isCarryingContainer = Boolean(robot.currentTaskId) || robot.intent === "DELIVER";
+  // Forklift arm extends sideways towards shelf when picking
+  const armExtension = isPickingPhase ? 0.38 : 0.08;
+
+  // Packages are only carried AFTER picking item from shelf
+  const isCarryingPackage = isDeliveringPhase || (Boolean(robot.currentTaskId) && !isPickingPhase);
 
   return (
     <group>
@@ -272,13 +281,13 @@ function Robot({ robot, nodes, selected, onSelect }: {
           <meshStandardMaterial color={color} roughness={0.52} metalness={0.22} />
         </mesh>
         
-        {/* Bottom Safety LED Strip (Green/Status Glow as seen in image) */}
+        {/* Bottom Safety LED Strip (Green/Status Glow) */}
         <mesh position={[0, -0.14, 0]} castShadow>
           <boxGeometry args={[1.19, 0.05, 0.87]} />
           <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.85} />
         </mesh>
 
-        {/* Straight Vertical Mast / Twin Mast Rod Pillars (from uploaded reference image) */}
+        {/* Straight Vertical Mast / Twin Mast Rod Pillars */}
         <group position={[-0.28, 0.8, 0]}>
           {[-0.26, 0.26].map((zOffset) => (
             <mesh key={zOffset} position={[0, 0, zOffset]} castShadow>
@@ -293,29 +302,29 @@ function Robot({ robot, nodes, selected, onSelect }: {
           </mesh>
         </group>
 
-        {/* Vertical Lift Carriage Mechanism (Moves along Mast) */}
+        {/* Vertical Lift Carriage Mechanism & Forklift Extension Arm */}
         <group position={[-0.22, liftHeight, 0]}>
           {/* Carriage Frame */}
           <mesh castShadow>
             <boxGeometry args={[0.32, 0.08, 0.62]} />
             <meshStandardMaterial color="#2d3936" metalness={0.65} roughness={0.35} />
           </mesh>
-          {/* Gripper Forks / Extractor Arms */}
-          <mesh position={[0.22, 0.02, 0]} castShadow>
-            <boxGeometry args={[0.24, 0.04, 0.54]} />
-            <meshStandardMaterial color="#d4b45d" metalness={0.5} roughness={0.4} />
+          {/* Forklift Extractor Gripper Arms (Extends sideways to reach shelf) */}
+          <mesh position={[0.18 + armExtension, 0.02, 0]} castShadow>
+            <boxGeometry args={[0.34, 0.04, 0.52]} />
+            <meshStandardMaterial color="#d4b45d" metalness={0.55} roughness={0.35} />
           </mesh>
 
-          {/* Storage Container / Package Tote Box (Landed on carriage during pick) */}
-          {isCarryingContainer && (
+          {/* Grocery Package Container Tote (Rides carriage after pickup) */}
+          {isCarryingPackage && (
             <group position={[0.1, 0.19, 0]}>
               <mesh castShadow receiveShadow>
                 <boxGeometry args={[0.48, 0.3, 0.44]} />
                 <meshStandardMaterial color="#ad8957" roughness={0.85} metalness={0.1} />
               </mesh>
-              {/* Package Tag Label */}
+              {/* Package SKU Label */}
               <mesh position={[0.25, 0, 0]} rotation={[0, Math.PI / 2, 0]}>
-                <planeGeometry args={[0.2, 0.12]} />
+                <planeGeometry args={[0.22, 0.14]} />
                 <meshBasicMaterial color="#f0ecda" />
               </mesh>
             </group>

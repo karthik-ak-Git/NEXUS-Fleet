@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useLocation } from 'wouter';
 import {
   Activity, AlertOctagon, ArrowDownRight, ArrowUpRight, Battery, Bot,
   Boxes, ChevronDown, CircleHelp, Clock3, Command, Gauge, Layers3,
@@ -11,6 +12,15 @@ import { WarehouseScene3D } from './WarehouseScene3D';
 
 type Datum = Record<string, any>;
 type Point = { x: number; y: number };
+
+const groceryProducts = [
+  { id: 'apples', name: 'Organic Honeycrisp Apples', rack: 'Rack A-11', pickup: 'N-1-1', sku: 'SKU-A11-ORGANIC_APPLES', category: 'Fresh Produce', icon: '🍎' },
+  { id: 'milk', name: 'Fresh Whole Milk 1L', rack: 'Rack B-12', pickup: 'N-1-2', sku: 'SKU-B12-FRESH_MILK', category: 'Dairy', icon: '🥛' },
+  { id: 'bread', name: 'Artisan Whole Wheat Bread', rack: 'Rack C-13', pickup: 'N-2-1', sku: 'SKU-C13-WHOLE_WHEAT_BREAD', category: 'Bakery', icon: '🍞' },
+  { id: 'oil', name: 'Extra Virgin Olive Oil 500ml', rack: 'Rack D-14', pickup: 'N-2-2', sku: 'SKU-D14-OLIVE_OIL', category: 'Pantry', icon: '🫒' },
+  { id: 'coffee', name: 'Dark Roasted Coffee Beans', rack: 'Rack E-15', pickup: 'N-3-1', sku: 'SKU-E15-ROASTED_COFFEE', category: 'Beverages', icon: '☕' },
+  { id: 'chocolate', name: '70% Dark Chocolate Bar', rack: 'Rack B-14', pickup: 'N-3-2', sku: 'SKU-B14-CHOCOLATE_BAR', category: 'Snacks', icon: '🍫' },
+];
 
 const scenarios = [
   ['normal', 'Nominal operation'],
@@ -216,6 +226,7 @@ function FleetMap({ robots, nodes, blockedEdges, obstacles, reservations, select
 }
 
 function FleetConsole() {
+  const [, setLocation] = useLocation();
   const { state, start, pause, reset, setSpeed, setScenario, inject, createTask, runBenchmark, runStressTest, runDemo, selectRobot } = useSimulation();
   const [scenario, setScenarioLocal] = useState('normal');
   const [disturbance, setDisturbance] = useState('block-aisle');
@@ -226,10 +237,18 @@ function FleetConsole() {
   const [followRobot, setFollowRobot] = useState(false);
   const [topView, setTopView] = useState(false);
   const [cameraReset, setCameraReset] = useState(0);
+
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [selectedProductIndex, setSelectedProductIndex] = useState(0);
+
   const data = state as unknown as Datum;
   const nodeLabels = useMemo(() => new Map(
     (Array.isArray(data?.nodes) ? data.nodes : []).map((node: Datum) => [node.id, node.label]),
   ), [data?.nodes]);
+  const nodeMapForDist = useMemo(() => new Map(
+    (Array.isArray(data?.nodes) ? data.nodes : []).map((node: Datum) => [node.id, { x: Number(node.x), y: Number(node.y) }])
+  ), [data?.nodes]);
+
   const rawRobots: Datum[] = Array.isArray(data?.robots) ? data.robots : [];
   const robots: Datum[] = rawRobots.map((robot) => ({
     ...robot,
@@ -237,6 +256,34 @@ function FleetConsole() {
     taskId: robot.currentTaskId,
     destination: nodeLabels.get(robot.destination) ?? robot.destination,
   }));
+
+  const selectedProduct = groceryProducts[selectedProductIndex];
+  const targetNodeCoord = nodeMapForDist.get(selectedProduct.pickup) ?? { x: 0, y: 0 };
+
+  const nearestIdleRobot = useMemo(() => {
+    const idleRobots = robots.filter((r) => r.health !== 'FAILED' && (!r.taskId || r.state === 'IDLE' || r.state === 'COMPLETED'));
+    if (!idleRobots.length) return robots[0] ?? null;
+
+    let bestRobot = idleRobots[0];
+    let minDistance = Infinity;
+
+    for (const robot of idleRobots) {
+      const rx = Number(robot.x ?? 0);
+      const ry = Number(robot.y ?? 0);
+      const dist = Math.hypot(rx - targetNodeCoord.x, ry - targetNodeCoord.y);
+      if (dist < minDistance) {
+        minDistance = dist;
+        bestRobot = robot;
+      }
+    }
+
+    return { ...bestRobot, distanceMeters: minDistance.toFixed(1) };
+  }, [robots, targetNodeCoord]);
+
+  const handleDispatchTask = () => {
+    createTask(selectedProduct.pickup, selectedProduct.sku, nearestIdleRobot?.id);
+    setIsTaskModalOpen(false);
+  };
   const tasks: Datum[] = (Array.isArray(data?.tasks) ? data.tasks : []).map((task: Datum) => ({
     ...task,
     pickup: nodeLabels.get(task.pickup) ?? task.pickup,
@@ -314,7 +361,13 @@ function FleetConsole() {
       <section className="workspace">
         <header className="topbar">
           <button type="button" className="mobile-menu" onClick={() => setMobileMenu(!mobileMenu)} aria-label="Toggle menu" data-testid="button-mobile-menu"><Menu size={19} /></button>
-          <div className="breadcrumb"><span>FACILITY</span><b>/</b><strong>LIVE OBSERVABILITY</strong></div>
+          <div className="breadcrumb">
+            <button onClick={() => setLocation('/')} className="hover:text-emerald-400 transition-colors cursor-pointer mr-1">OVERVIEW</button>
+            <b>/</b>
+            <button onClick={() => setLocation('/docs')} className="hover:text-emerald-400 transition-colors cursor-pointer mx-1 font-semibold">DOCS</button>
+            <b>/</b>
+            <strong className="ml-1 text-emerald-400 font-mono">3D CONSOLE</strong>
+          </div>
           <div className="topbar-right">
             <div className="clock-readout"><span>SIM TIME</span><strong className="mono">{shortTime(data?.time)}</strong></div>
             <div className="topbar-divider" />
@@ -365,7 +418,7 @@ function FleetConsole() {
               <div className="speed-control"><span>SPEED</span>{[1, 2, 4].map((speed) => <button type="button" key={speed} className={Number(data?.speed ?? 1) === speed ? 'speed-active' : ''}
                 onClick={() => setSpeed(speed)} data-testid={`button-speed-${speed}`}>{speed}×</button>)}</div>
               <span className="control-v-divider" />
-              <button type="button" className="control-icon-button create-task-button" onClick={() => createTask()} data-testid="button-create-task"><Plus size={14} /> Add task</button>
+              <button type="button" className="control-icon-button create-task-button" onClick={() => setIsTaskModalOpen(true)} data-testid="button-create-task"><Plus size={14} /> Add task</button>
             </div>
           </div>
 
@@ -468,8 +521,8 @@ function FleetConsole() {
 
             <section className="panel event-panel" id="section-events">
               <div className="section-title-row"><div><div className="panel-kicker">SYSTEM JOURNAL</div><h2>Recent events</h2></div><span className="event-stream-label"><span className="pulse-dot" /> STREAM</span></div>
-              {events.length ? <div className="event-list scrollbar-thin">
-                {events.slice(0, 7).map((event, index) => <EventLine event={event} key={str(event.id, `event-${index}`)} index={index} />)}
+              {events.length ? <div className="event-list scrollbar-thin max-h-96 overflow-y-auto">
+                {events.slice(0, 15).map((event, index) => <EventLine event={event} key={str(event.id, `event-${index}`)} index={index} />)}
               </div> : <div className="quiet-empty event-empty"><Clock3 size={16} /><span>Waiting for simulation events. Coordination decisions and state changes appear here.</span></div>}
               <div className="panel-footnote"><span>EVENT BUS <b>CONNECTED</b></span><span>{events.length} RECORDS</span></div>
             </section>
@@ -513,6 +566,86 @@ function FleetConsole() {
           <footer className="page-footer"><span>NEXUS-FLEET <b>v0.9.26</b> · BEL WAREHOUSE DIGITAL TWIN</span><span>BUILT FOR AUTONOMOUS COORDINATION <i /></span></footer>
         </div>
       </section>
+
+      {/* Grocery Task Creation Modal */}
+      {isTaskModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#17221f] border border-[#283834] rounded-xl max-w-xl w-full p-6 text-white shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-[#283834] pb-4">
+              <div>
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <Boxes className="text-[#3db89a]" size={22} />
+                  <span>Select Grocery Product Order</span>
+                </h2>
+                <p className="text-xs text-[#8aa39b] mt-1">Pick a product from storage racks; system automatically assigns nearest idle AMR</p>
+              </div>
+              <button type="button" onClick={() => setIsTaskModalOpen(false)} className="text-[#8aa39b] hover:text-white text-xl font-bold p-1">✕</button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {groceryProducts.map((product, idx) => {
+                const isSelected = idx === selectedProductIndex;
+                return (
+                  <button
+                    key={product.id}
+                    type="button"
+                    onClick={() => setSelectedProductIndex(idx)}
+                    className={`p-3 rounded-lg border text-left transition-all flex items-start gap-3 ${
+                      isSelected
+                        ? 'border-[#3db89a] bg-[#1f332c] shadow-lg ring-1 ring-[#3db89a]'
+                        : 'border-[#283834] bg-[#111816]/60 hover:border-[#385249]'
+                    }`}
+                  >
+                    <span className="text-2xl">{product.icon}</span>
+                    <div className="overflow-hidden">
+                      <div className="font-semibold text-sm text-white truncate">{product.name}</div>
+                      <div className="text-xs text-[#3db89a] font-mono mt-0.5">{product.rack} ({product.pickup})</div>
+                      <div className="text-[10px] text-[#8aa39b]">{product.category}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Nearest Robot Auto Assignment Summary */}
+            <div className="bg-[#192723] border border-[#2e4d43] rounded-lg p-4 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-[#8aa39b]">Target Shelf Rack:</span>
+                <span className="font-mono text-[#3db89a] font-semibold">{selectedProduct.rack} ({selectedProduct.pickup})</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-[#8aa39b]">Product SKU:</span>
+                <span className="font-mono text-white text-[11px]">{selectedProduct.sku}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs pt-2 border-t border-[#2e4d43]">
+                <span className="text-[#8aa39b]">Nearest Idle Robot:</span>
+                <span className="font-mono font-bold text-amber-400 flex items-center gap-1 text-sm">
+                  <Bot size={16} />
+                  {nearestIdleRobot ? `${nearestIdleRobot.id} (${nearestIdleRobot.distanceMeters ?? '3.5'}m away)` : 'AMR-01'}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#283834]">
+              <button
+                type="button"
+                onClick={() => setIsTaskModalOpen(false)}
+                className="px-4 py-2 rounded-lg border border-[#283834] text-sm text-[#8aa39b] hover:text-white hover:bg-[#1f2c28] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDispatchTask}
+                className="px-5 py-2 rounded-lg bg-[#2e8b75] hover:bg-[#38a38a] text-white text-sm font-semibold flex items-center gap-2 transition-all shadow-md cursor-pointer"
+              >
+                <Plus size={16} />
+                <span>Assign Task to {nearestIdleRobot?.id ?? 'AMR-01'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

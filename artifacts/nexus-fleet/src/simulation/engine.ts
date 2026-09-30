@@ -202,8 +202,8 @@ export class SimulationEngine {
     this.emit(null, "DEMO_STARTED", "Automated autonomy sequence started; no robot-level inputs are scheduled.", null, "Environmental events will be injected over time.");
   }
 
-  createTask() {
-    const task = this.makeTask();
+  createTask(pickupOverride?: string, skuOverride?: string) {
+    const task = this.makeTask(0, pickupOverride, skuOverride);
     this.tasks.push(task);
     this.emit(null, "TASK_CREATED", `${task.id} entered the warehouse task auction.`, task.pickup, `${task.orderId} · ${task.sku}`);
     this.broadcast("*", "TASK_BID", { taskId: task.id, phase: "OPEN" });
@@ -373,13 +373,13 @@ export class SimulationEngine {
     return tasks;
   }
 
-  private makeTask(index = 0, pickupOverride?: string): WarehouseTask {
+  private makeTask(index = 0, pickupOverride?: string, skuOverride?: string): WarehouseTask {
     const racks = getRackLocations();
     const rack = racks[(this.randomInt(racks.length) + index) % racks.length];
     return {
       id: `TASK-${this.taskSequence++}`,
       orderId: `ORD-${String(78421 + this.taskSequence % 999).padStart(5, "0")}`,
-      sku: rack.sku,
+      sku: skuOverride ?? rack.sku,
       pickup: pickupOverride ?? rack.id,
       destination: PACKING_NODE,
       priority: PRIORITIES[(index + this.randomInt(PRIORITIES.length)) % PRIORITIES.length],
