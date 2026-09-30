@@ -117,6 +117,7 @@ export function FleetConsole() {
   const [followRobot, setFollowRobot] = useState(false);
   const [topView, setTopView] = useState(false);
   const [cameraReset, setCameraReset] = useState(0);
+  const [debugMode, setDebugMode] = useState(false);
 
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>(['apples', 'milk', 'bread']);
@@ -350,6 +351,13 @@ export function FleetConsole() {
                       FOLLOW
                     </button>
                     <button
+                      onClick={() => setDebugMode(!debugMode)}
+                      className={`px-3 py-1.5 rounded-lg border font-mono transition-all ${debugMode ? 'bg-amber-600 border-amber-400 text-white font-bold' : 'bg-[#111816] border-[#283834] text-[#8aa39b] hover:text-white'}`}
+                      title="Toggle Developer Digital-Twin Telemetry & Debug Layer"
+                    >
+                      DEBUG
+                    </button>
+                    <button
                       onClick={() => { setFollowRobot(false); setTopView(false); setCameraReset((v) => v + 1); }}
                       className="p-1.5 rounded-lg bg-[#111816] border border-[#283834] text-[#8aa39b] hover:text-white transition-colors"
                       title="Reset Camera"
@@ -375,6 +383,7 @@ export function FleetConsole() {
                   follow={followRobot}
                   topView={topView}
                   resetToken={cameraReset}
+                  debugMode={debugMode}
                 />
               </div>
             ) : (

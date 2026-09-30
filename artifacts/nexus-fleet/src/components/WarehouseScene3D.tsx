@@ -219,11 +219,66 @@ function Station({ position, label, tint }: { position: [number, number, number]
   );
 }
 
-function Robot({ robot, nodes, selected, onSelect }: {
+function DockingZoneMat({ position }: { position: [number, number, number] }) {
+  return (
+    <group position={position}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.025, 0]}>
+        <planeGeometry args={[2.4, 1.8]} />
+        <meshStandardMaterial color="#1a423a" roughness={0.6} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.035, 0]}>
+        <ringGeometry args={[0.35, 0.65, 32]} />
+        <meshBasicMaterial color="#3db89a" transparent opacity={0.8} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}>
+        <circleGeometry args={[0.2, 16]} />
+        <meshBasicMaterial color="#e3c066" />
+      </mesh>
+      <LabelSprite position={[0, 0.6, 0]} text="DOCK ZONE · PACK-02" tone="station" size={[1.5, 0.28]} />
+    </group>
+  );
+}
+
+function DebugGraphOverlay({ nodes, edges, debugMode }: { nodes: Map<string, Datum>; edges: Datum[]; debugMode: boolean }) {
+  if (!debugMode) return null;
+  const nodeList = Array.from(nodes.values());
+  return (
+    <group>
+      {nodeList.map((node) => (
+        <group key={node.id} position={[node.x, 0.08, node.y]}>
+          <mesh>
+            <sphereGeometry args={[0.18, 16, 16]} />
+            <meshBasicMaterial color={node.kind === "packing" ? "#3db89a" : node.kind === "charger" ? "#38bdf8" : "#2e8b75"} />
+          </mesh>
+          <LabelSprite position={[0, 0.45, 0]} text={`${node.id} (${node.x},${node.y})`} tone="neutral" size={[1.4, 0.28]} />
+        </group>
+      ))}
+
+      {edges.map((edge) => {
+        const from = nodes.get(edge.from_node ?? edge.from);
+        const to = nodes.get(edge.to_node ?? edge.to);
+        if (!from || !to) return null;
+        return (
+          <Line
+            key={edge.id ?? `${from.id}-${to.id}`}
+            points={[[from.x, 0.08, from.y], [to.x, 0.08, to.y]]}
+            color="#2e8b75"
+            lineWidth={1.5}
+            transparent
+            opacity={0.5}
+          />
+        );
+      })}
+    </group>
+  );
+}
+
+function Robot({ robot, nodes, selected, onSelect, debugMode }: {
   robot: Datum;
   nodes: Map<string, Datum>;
   selected: boolean;
   onSelect: () => void;
+  debugMode?: boolean;
 }) {
   const color = robotColor(robot.status);
   const routePoints = (Array.isArray(robot.route) ? robot.route : [])
@@ -355,6 +410,20 @@ function Robot({ robot, nodes, selected, onSelect }: {
               <meshStandardMaterial color="#24312f" roughness={0.86} />
             </mesh>
           )),
+        )}
+
+        {/* Developer Debug Wireframe & Heading Vector Arrow */}
+        {debugMode && (
+          <group>
+            <mesh position={[0, 0, 0]}>
+              <boxGeometry args={[1.22, 0.45, 0.90]} />
+              <meshBasicMaterial color="#3db89a" wireframe />
+            </mesh>
+            <mesh position={[0.75, 0.05, 0]} rotation={[0, 0, -Math.PI / 2]}>
+              <coneGeometry args={[0.08, 0.5, 12]} />
+              <meshBasicMaterial color="#f59e0b" />
+            </mesh>
+          </group>
         )}
       </group>
 
@@ -613,6 +682,7 @@ export function WarehouseScene3D({
   follow,
   topView,
   resetToken,
+  debugMode = false,
 }: {
   robots: Datum[];
   nodes: Datum[];
@@ -624,6 +694,7 @@ export function WarehouseScene3D({
   follow: boolean;
   topView: boolean;
   resetToken: number;
+  debugMode?: boolean;
 }) {
   const nodeMap = useMemo(
     () => new Map(nodes.map((node) => [node.id, node])),
@@ -643,7 +714,7 @@ export function WarehouseScene3D({
   );
 
   return (
-    <div className="warehouse-3d">
+    <div className="warehouse-3d relative">
       <SceneErrorBoundary fallback={fallback}>
         <Canvas shadows="basic" dpr={[1, 1.65]} camera={{ position: [23, 23, 25], fov: 39, near: 0.1, far: 140 }}>
           <color attach="background" args={["#d5d4c8"]} />
@@ -663,6 +734,8 @@ export function WarehouseScene3D({
           />
           <Floor />
           <WarehouseRacks />
+          <DockingZoneMat position={[16, 0, -2]} />
+          <DebugGraphOverlay nodes={nodeMap} edges={edges} debugMode={debugMode} />
           <ResourceOverlays edges={edges} nodes={nodeMap} reservations={reservations} obstacles={obstacles} />
           <InterlinkConnections robots={robots} />
           {robots.map((robot) => (
@@ -672,6 +745,7 @@ export function WarehouseScene3D({
               nodes={nodeMap}
               selected={robot.id === selectedId}
               onSelect={() => onSelect(robot.id)}
+              debugMode={debugMode}
             />
           ))}
           <CameraRig selectedRobot={selected} follow={follow} topView={topView} resetToken={resetToken} />
@@ -687,6 +761,31 @@ export function WarehouseScene3D({
         </Canvas>
         <div className="scene-hud scene-hud-north">N ↑</div>
         <div className="scene-hud scene-hud-scale">WAREHOUSE SCALE · 1 UNIT / 1 M</div>
+
+        {/* Developer Digital-Twin Telemetry HUD Overlay (Requirement 12 & 19) */}
+        {debugMode && (
+          <div className="absolute top-3 right-3 bg-[#111816]/90 backdrop-blur border border-[#3db89a]/50 text-emerald-300 p-3 rounded-lg text-xs font-mono shadow-2xl max-w-xs space-y-1.5 z-20">
+            <div className="flex items-center justify-between border-b border-[#283834] pb-1 font-bold text-white">
+              <span>DIGITAL TWIN TELEMETRY</span>
+              <span className="text-[10px] bg-[#2e8b75] text-white px-1.5 py-0.5 rounded">10 Hz LIVE</span>
+            </div>
+            {selected ? (
+              <div className="space-y-1">
+                <div>Robot ID: <strong className="text-white">{selected.id}</strong></div>
+                <div>Backend (X, Y): <span className="text-white">({Number(selected.x).toFixed(2)}, {Number(selected.y).toFixed(2)})</span></div>
+                <div>Rendered (X, Z): <span className="text-white">({Number(selected.x).toFixed(2)}, {Number(selected.y).toFixed(2)})</span></div>
+                <div>Backend Heading: <span className="text-white">{((Number(selected.heading ?? 0) * 180) / Math.PI).toFixed(1)}°</span></div>
+                <div>Rendered Y-Rot: <span className="text-white">{((-Number(selected.heading ?? 0) * 180) / Math.PI).toFixed(1)}°</span></div>
+                <div>Current Node: <span className="text-[#3db89a] font-bold">{selected.currentNode ?? "—"}</span></div>
+                <div>Current Waypoint: <span className="text-[#38bdf8]">{selected.currentWaypoint ?? "—"}</span></div>
+                <div>Status: <span className="text-amber-300 font-bold">{String(selected.status ?? "IDLE").toUpperCase()}</span></div>
+                <div>Intent: <span className="text-slate-200">{String(selected.intent ?? "NONE")}</span></div>
+              </div>
+            ) : (
+              <div className="text-slate-400 italic">Select an AMR in 3D canvas to inspect coordinate transforms.</div>
+            )}
+          </div>
+        )}
       </SceneErrorBoundary>
     </div>
   );
