@@ -231,6 +231,20 @@ function Robot({ robot, nodes, selected, onSelect }: {
     .filter(Boolean)
     .map((node: Datum) => [node.x, 0.18, node.y] as [number, number, number]);
   const route = [[robot.x, 0.18, robot.y] as [number, number, number], ...routePoints];
+
+  // Dynamic vertical carriage height animation based on intent & status
+  const isPickingOrDelivering =
+    robot.intent === "PICK" ||
+    robot.intent === "DELIVER" ||
+    String(robot.status).includes("MOVING") ||
+    String(robot.status).includes("WAITING");
+
+  const liftHeight = isPickingOrDelivering
+    ? 0.45 + Math.abs(Math.sin((robot.x * 1.5 + robot.y * 1.5))) * 0.75
+    : 0.25;
+
+  const isCarryingContainer = Boolean(robot.currentTaskId) || robot.intent === "DELIVER";
+
   return (
     <group>
       {route.length > 1 && (
@@ -252,26 +266,79 @@ function Robot({ robot, nodes, selected, onSelect }: {
         onPointerOver={() => { document.body.style.cursor = "pointer"; }}
         onPointerOut={() => { document.body.style.cursor = "default"; }}
       >
+        {/* Drive Base Chassis (SOLO Style Cart Base) */}
         <mesh castShadow receiveShadow>
           <boxGeometry args={[1.18, 0.34, 0.86]} />
           <meshStandardMaterial color={color} roughness={0.52} metalness={0.22} />
         </mesh>
-        <mesh position={[0.18, 0.22, 0]} castShadow>
-          <boxGeometry args={[0.44, 0.12, 0.58]} />
-          <meshStandardMaterial color="#d2c8ae" roughness={0.6} metalness={0.15} />
+        
+        {/* Bottom Safety LED Strip (Green/Status Glow as seen in image) */}
+        <mesh position={[0, -0.14, 0]} castShadow>
+          <boxGeometry args={[1.19, 0.05, 0.87]} />
+          <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.85} />
         </mesh>
+
+        {/* Straight Vertical Mast / Twin Mast Rod Pillars (from uploaded reference image) */}
+        <group position={[-0.28, 0.8, 0]}>
+          {[-0.26, 0.26].map((zOffset) => (
+            <mesh key={zOffset} position={[0, 0, zOffset]} castShadow>
+              <cylinderGeometry args={[0.032, 0.032, 1.6, 14]} />
+              <meshStandardMaterial color="#c0c5c1" metalness={0.85} roughness={0.2} />
+            </mesh>
+          ))}
+          {/* Top Mast Crossbar Cap */}
+          <mesh position={[0, 0.8, 0]} castShadow>
+            <boxGeometry args={[0.09, 0.05, 0.58]} />
+            <meshStandardMaterial color="#3a4844" metalness={0.7} roughness={0.3} />
+          </mesh>
+        </group>
+
+        {/* Vertical Lift Carriage Mechanism (Moves along Mast) */}
+        <group position={[-0.22, liftHeight, 0]}>
+          {/* Carriage Frame */}
+          <mesh castShadow>
+            <boxGeometry args={[0.32, 0.08, 0.62]} />
+            <meshStandardMaterial color="#2d3936" metalness={0.65} roughness={0.35} />
+          </mesh>
+          {/* Gripper Forks / Extractor Arms */}
+          <mesh position={[0.22, 0.02, 0]} castShadow>
+            <boxGeometry args={[0.24, 0.04, 0.54]} />
+            <meshStandardMaterial color="#d4b45d" metalness={0.5} roughness={0.4} />
+          </mesh>
+
+          {/* Storage Container / Package Tote Box (Landed on carriage during pick) */}
+          {isCarryingContainer && (
+            <group position={[0.1, 0.19, 0]}>
+              <mesh castShadow receiveShadow>
+                <boxGeometry args={[0.48, 0.3, 0.44]} />
+                <meshStandardMaterial color="#ad8957" roughness={0.85} metalness={0.1} />
+              </mesh>
+              {/* Package Tag Label */}
+              <mesh position={[0.25, 0, 0]} rotation={[0, Math.PI / 2, 0]}>
+                <planeGeometry args={[0.2, 0.12]} />
+                <meshBasicMaterial color="#f0ecda" />
+              </mesh>
+            </group>
+          )}
+        </group>
+
+        {/* Directional Sensor Nose Cone */}
         <mesh position={[0.69, 0.03, 0]} rotation={[0, 0, -Math.PI / 2]} castShadow>
           <coneGeometry args={[0.16, 0.38, 3]} />
           <meshStandardMaterial color="#f0c15b" roughness={0.4} />
         </mesh>
-        <mesh position={[-0.2, 0.34, 0]} castShadow>
-          <cylinderGeometry args={[0.18, 0.18, 0.13, 20]} />
+
+        {/* Top LiDAR Sensor Turret & Beacon Indicator */}
+        <mesh position={[-0.42, 0.22, 0]} castShadow>
+          <cylinderGeometry args={[0.14, 0.14, 0.12, 20]} />
           <meshStandardMaterial color="#3a4946" metalness={0.72} roughness={0.24} />
         </mesh>
-        <mesh position={[-0.2, 0.42, 0]} castShadow>
+        <mesh position={[-0.42, 0.3, 0]} castShadow>
           <cylinderGeometry args={[0.035, 0.035, 0.06, 14]} />
           <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.6} />
         </mesh>
+
+        {/* 4 Wheels at Base Chassis */}
         {[-0.36, 0.36].flatMap((z) =>
           [-0.38, 0.38].map((x) => (
             <mesh key={`${x}-${z}`} position={[x, -0.12, z]} rotation={[Math.PI / 2, 0, 0]} castShadow>
@@ -281,8 +348,9 @@ function Robot({ robot, nodes, selected, onSelect }: {
           )),
         )}
       </group>
+
       <LabelSprite
-        position={[robot.x, 0.96, robot.y]}
+        position={[robot.x, 1.95, robot.y]}
         text={`${robot.id} · ${String(robot.status ?? "IDLE").replaceAll("_", " ")}`}
         tone="robot"
         size={[2.1, 0.44]}
