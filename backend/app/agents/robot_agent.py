@@ -511,22 +511,42 @@ class RobotAgent:
             context.emit(self.state.id, "ITEM_PICKED", self.state.reason, task.pickup, task.sku)
             self.record_decision(context.now, "PICKUP", self.state.reason)
         elif task.picked and self.state.currentNode == task.destination:
+            if task.status == "COMPLETED":
+                return
+            # Counter Package Acceptance & Handshake: ROBOT -> COUNTER
+            task.picked = False
             task.status = "COMPLETED"
             task.eta = context.now
+
             self.state.currentTaskId = None
             self.state.taskPriority = 0.0
             self.state.destination = None
-            self.state.intent = "AVAILABLE"
-            self.state.status = "COMPLETED"
-            self.state.reason = f"Delivered {task.sku} to packing; agent available for next auction."
+            self.route_goal = None
+            self.state.status = "DELIVERY_COMPLETED"
+            self.state.reason = f"Counter {task.destination} accepted {task.sku}; delivery complete."
+
             context.emit(self.state.id, "TASK_COMPLETED", self.state.reason, task.destination, task.id)
             self.record_decision(context.now, "TASK_COMPLETE", self.state.reason)
             context.on_task_completed(task.id, self.state.id)
+
+            # Check for next available task vs returning home
             if self.state.taskQueue:
                 queued_id = self.state.taskQueue.pop(0)
                 next_t = next((candidate for candidate in context.tasks if candidate.id == queued_id), None)
                 if next_t:
                     self.assign_task(next_t, context.now)
+            else:
+                home_node = self._get_home_slot()
+                if self.state.currentNode != home_node:
+                    self.state.intent = "RETURNING_HOME"
+                    self.state.status = "MOVING"
+                    self.state.destination = home_node
+                    self.state.reason = f"Delivery completed; returning home to assigned charging slot {home_node}."
+                    self._ensure_route(home_node, context)
+                else:
+                    self.state.intent = "CHARGING"
+                    self.state.status = "IDLE"
+                    self.state.reason = f"Docked at assigned charging slot {home_node}."
 
     def _apply_battery_policy(self, context: AgentContext):
         if self.charge_target or self.state.health == "FAILED":

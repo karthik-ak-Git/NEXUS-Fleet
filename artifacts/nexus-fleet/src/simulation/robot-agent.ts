@@ -640,20 +640,41 @@ export class RobotAgent {
       context.emit(this.state.id, "ITEM_PICKED", this.state.reason, task.pickup, task.sku);
       this.recordDecision(context.now, "PICKUP", this.state.reason);
     } else if (task.picked && this.state.currentNode === task.destination) {
+      if (task.status === "COMPLETED") return;
+      // Counter Package Acceptance & Handshake: ROBOT -> COUNTER
+      task.picked = false;
       task.status = "COMPLETED";
       task.eta = context.now;
+
       this.state.currentTaskId = null;
       this.state.taskPriority = 0;
       this.state.destination = null;
-      this.state.intent = "AVAILABLE";
-      this.state.status = "COMPLETED";
-      this.state.reason = `Delivered ${task.sku} to packing; agent is available for the next auction.`;
+      this.routeGoal = null;
+      this.state.status = "DELIVERY_COMPLETED";
+      this.state.reason = `Counter ${task.destination} accepted ${task.sku}; delivery complete.`;
+
       context.emit(this.state.id, "TASK_COMPLETED", this.state.reason, task.destination, task.id);
       this.recordDecision(context.now, "TASK_COMPLETE", this.state.reason);
       context.onTaskCompleted(task.id, this.state.id);
+
       const queued = this.state.taskQueue.shift();
       const next = queued ? context.tasks.find((candidate) => candidate.id === queued) : null;
-      if (next) this.assignTask(next, context.now);
+      if (next) {
+        this.assignTask(next, context.now);
+      } else {
+        const homeNode = this.getHomeSlot();
+        if (this.state.currentNode !== homeNode) {
+          this.state.intent = "RETURNING_HOME";
+          this.state.status = "MOVING";
+          this.state.destination = homeNode;
+          this.state.reason = `Delivery complete; returning home to charging slot ${homeNode}.`;
+          this.ensureRoute(homeNode, context);
+        } else {
+          this.state.intent = "CHARGING";
+          this.state.status = "IDLE";
+          this.state.reason = `Docked at assigned charging slot ${homeNode}.`;
+        }
+      }
     }
   }
 

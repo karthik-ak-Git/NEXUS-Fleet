@@ -12,6 +12,7 @@ export type RobotStatus =
   | "COMMUNICATION_LOST"
   | "FAILED"
   | "RECOVERING"
+  | "DELIVERY_COMPLETED"
   | "COMPLETED";
 
 export type TaskStatus =

@@ -56,3 +56,33 @@ def test_benchmark_execution():
     assert result.timeReduction >= 0.0
     assert result.baseline.completionTime > 0.0
     assert result.nexus.completionTime > 0.0
+
+def test_delivery_handshake_and_home_return():
+    engine = SimulationEngine(seed=26123, mode="distributed", robot_count=1, task_count=1)
+    engine.start()
+    
+    # Run simulation until task completes and robot returns home
+    max_steps = 300
+    task_completed = False
+    home_docked = False
+
+    for _ in range(max_steps):
+        engine.step(0.2)
+        snapshot = engine.get_snapshot()
+        task = snapshot.tasks[0] if snapshot.tasks else None
+        amr1 = snapshot.robots[0] if snapshot.robots else None
+
+        if task and task.status == "COMPLETED":
+            task_completed = True
+            # Verify package ownership transferred from robot -> counter
+            assert task.picked is False
+            assert amr1.currentTaskId is None
+
+        if amr1 and amr1.intent in ("CHARGING", "RETURNING_HOME") and amr1.currentNode == "N-0-0":
+            home_docked = True
+
+        if task_completed and home_docked:
+            break
+
+    assert task_completed is True, "Counter must accept package and complete task"
+    assert home_docked is True, "Robot must return to assigned home charging slot N-0-0"
