@@ -164,7 +164,7 @@ function WarehouseRacks() {
         [-6, -2, 2, 6].map((z, row) => ({
           id: `R-${String(row * 6 + column + 1).padStart(2, "0")}`,
           x,
-          z: z + (row % 2 === 0 ? 1.25 : -1.25),
+          z: z + (row % 2 === 0 ? 1.6 : -1.6),
         })),
       ),
     [],

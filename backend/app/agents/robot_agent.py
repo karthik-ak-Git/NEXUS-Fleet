@@ -760,14 +760,11 @@ class RobotAgent:
         heading = math.atan2(destination.y - source.y, destination.x - source.x)
         self.state.heading = heading
         
-        # Dual-Lane Sideways Overtake Protocol: Right-hand lateral shift for head-on passing
-        rx, ry = math.sin(heading), -math.cos(heading)
-        lane_offset = 0.65 if (opposing or self.state.intent in ("PICK", "OVERTAKE")) else 0.45
         x_center = source.x + (destination.x - source.x) * self.state.edgeProgress
         y_center = source.y + (destination.y - source.y) * self.state.edgeProgress
         
-        self.state.x = x_center + rx * lane_offset
-        self.state.y = y_center + ry * lane_offset
+        self.state.x = x_center
+        self.state.y = y_center
         self.state.distanceTravelled += edge.length * (self.state.edgeProgress - prev_progress)
 
         if self.state.status in ("NEGOTIATING", "REROUTING"):

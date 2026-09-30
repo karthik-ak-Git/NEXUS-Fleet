@@ -970,15 +970,11 @@ export class RobotAgent {
     const heading = Math.atan2(destination.y - source.y, destination.x - source.x);
     this.state.heading = heading;
 
-    // Dual-Lane Sideways Overtake Protocol: Right-hand lateral shift for head-on passing
-    const rx = Math.sin(heading);
-    const ry = -Math.cos(heading);
-    const laneOffset = opposingTraffic || this.state.intent === "PICK" || this.state.intent === "OVERTAKE" ? 0.65 : 0.45;
     const xCenter = source.x + (destination.x - source.x) * this.state.edgeProgress;
     const yCenter = source.y + (destination.y - source.y) * this.state.edgeProgress;
 
-    this.state.x = xCenter + rx * laneOffset;
-    this.state.y = yCenter + ry * laneOffset;
+    this.state.x = xCenter;
+    this.state.y = yCenter;
     this.state.distanceTravelled += edge.length * (this.state.edgeProgress - previousProgress);
     this.state.status =
       this.state.status === "NEGOTIATING" || this.state.status === "REROUTING"
