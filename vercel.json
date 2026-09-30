@@ -1,26 +1,19 @@
 {
   "version": 2,
-  "builds": [
+  "buildCommand": "PORT=5173 BASE_PATH=/ pnpm --filter @workspace/nexus-fleet build",
+  "outputDirectory": "artifacts/nexus-fleet/dist/public",
+  "rewrites": [
     {
-      "src": "artifacts/nexus-fleet/package.json",
-      "use": "@vercel/vite"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "http://localhost:8000/api/$1"
+      "source": "/api/(.*)",
+      "destination": "https://nexus-fleet-backend.onrender.com/api/$1"
     },
     {
-      "src": "/ws/(.*)",
-      "dest": "ws://localhost:8000/ws/$1"
+      "source": "/ws/(.*)",
+      "destination": "wss://nexus-fleet-backend.onrender.com/ws/$1"
     },
     {
-      "handle": "filesystem"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/artifacts/nexus-fleet/index.html"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }

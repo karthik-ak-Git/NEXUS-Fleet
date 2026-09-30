@@ -544,7 +544,9 @@ function InterlinkConnections({ robots }: { robots: Datum[] }) {
         const r1 = activeRobots[i];
         const r2 = activeRobots[j];
         const dist = Math.hypot(Number(r1.x ?? 0) - Number(r2.x ?? 0), Number(r1.y ?? 0) - Number(r2.y ?? 0));
-        if (dist <= 20.0 && (r1.status !== "IDLE" || r2.status !== "IDLE")) {
+        const r1Active = r1.status && r1.status !== "IDLE" && r1.status !== "CHARGING";
+        const r2Active = r2.status && r2.status !== "IDLE" && r2.status !== "CHARGING";
+        if (dist <= 5.0 && (r1Active || r2Active)) {
           result.push([r1, r2]);
         }
       }

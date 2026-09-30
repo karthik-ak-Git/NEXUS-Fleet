@@ -1,136 +1,148 @@
-# NEXUS-Fleet: Autonomous Warehouse AMR Digital Twin & Multi-Agent Fleet Engine
+# 🤖 NEXUS-Fleet: Edge-AI Distributed Fleet Coordination Digital Twin
 
-> **SIH 2026 Problem Statement:** SIH26123  
-> **Title:** Edge-AI Based Distributed Fleet Coordination for Autonomous Mobile Robots (AMRs) in Smart Warehouses  
-> **Core Principle:** THE ROBOT IS THE AGENT. The backend application hosts the distributed agent runtime and state synchronization layer; each AMR maintains its own operational state and independently makes task, routing, negotiation, reservation, recovery, and safety decisions.
+> **Smart India Hackathon 2026 — Grand Finale Project**  
+> **Problem Statement ID:** `SIH26123` | **Theme:** `Smart Automation` | **Category:** `Software`  
+> **Team Name:** `SPARK-08` (`Team ID: 143472`) | **Nodal Agency:** `Bharat Electronics Limited`
 
----
-
-## 📐 System Architecture
-
-```
-                    ORDERS / TASK MANAGER
-                              |
-                              v
-                    FLEET MANAGER
-                              |
-             +----------------+----------------+
-             |                |                |
-             v                v                v
-           AMR-01           AMR-02           AMR-N
-             |                |                |
-             +----------------+----------------+
-                              |
-                       SHARED WORLD STATE
-                              |
-                +-------------+-------------+
-                |                           |
-                v                           v
-            2D OPERATIONAL               3D DIGITAL
-                 MAP                        TWIN
-```
+[![SIH 2026](https://img.shields.io/badge/SIH-2026_Finale-0F2C59?style=for-the-badge&logo=react)](https://github.com/karthik-ak-Git/NEXUS-Fleet)
+[![FastAPI Backend](https://img.shields.io/badge/FastAPI-Pytest_Passed_22/22-009688?style=for-the-badge&logo=fastapi)](https://github.com/karthik-ak-Git/NEXUS-Fleet)
+[![TypeScript Workspace](https://img.shields.io/badge/TypeScript-0_Type_Errors-3178C6?style=for-the-badge&logo=typescript)](https://github.com/karthik-ak-Git/NEXUS-Fleet)
+[![Docker Ready](https://img.shields.io/badge/Docker-Multi--stage-2496ED?style=for-the-badge&logo=docker)](https://github.com/karthik-ak-Git/NEXUS-Fleet)
 
 ---
 
-## 🚀 Quick Start
+## 📌 GitHub "About" Section Copy-Paste Snippet
 
-### 1. Prerequisites
-- **Python:** 3.10+ with [`uv`](https://github.com/astral-sh/uv)
-- **Node.js:** 20+ with [`pnpm`](https://pnpm.io/)
+Use this exact text & topic tags when updating the **About** box on your GitHub repository page:
 
-### 2. Installation & Running
-
-#### Backend Autonomous Engine (`uv`):
-```bash
-uv run uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
+### 📝 About Description:
+```text
+Edge-AI Based Distributed Fleet Coordination for Autonomous Mobile Robots (AMRs) in Smart Warehouses (SIH 2026 - PS SIH26123). Features 3D Three.js Digital Twin, 2D operational layout, P2P collision & conflict resolution, dynamic A* routing, and battery charging loop.
 ```
 
-#### Frontend UI Digital Twin (`pnpm`):
-```bash
-$env:PORT="5173"; $env:BASE_PATH="/"; cmd /c "set PORT=5173 && set BASE_PATH=/ && pnpm dev"
+### 🏷️ Topic Tags to Add:
+`sih2026` `autonomous-mobile-robots` `digital-twin` `threejs` `fastapi` `edge-ai` `warehouse-automation` `p2p-coordination` `a-star-pathfinding` `react-three-fiber`
+
+---
+
+## 🏗️ System Architecture & Visual Overview
+
+```
+                          ┌──────────────────────────────────────────┐
+                          │   NEXUS-Fleet 3D/2D Web Dashboard        │
+                          │   (React / Vite / Three.js / Canvas)     │
+                          └───────────────────┬──────────────────────┘
+                                              │
+                                   WebSockets / HTTP REST
+                                              │
+                          ┌───────────────────▼──────────────────────┐
+                          │   FastAPI Autonomous Engine Server       │
+                          │   (P2P Agent Runtimes & Pytest Suite)    │
+                          └───────────────────┬──────────────────────┘
+                                              │
+                    ┌─────────────────────────┴─────────────────────────┐
+                    ▼                                                   ▼
+       ┌────────────────────────┐                          ┌────────────────────────┐
+       │ Active AMRs (01 .. 05)  │                          │ Charger Slots (C1..C5) │
+       │ Pickup -> Pack Counter │                          │ Low-Batt Silent Return │
+       └────────────────────────┘                          └────────────────────────┘
 ```
 
 ---
 
-## 🌐 Live URLs & Endpoints
+## 🌐 Live Web Application & Documentation Links
 
-| Interface | URL | Purpose |
-|-----------|-----|---------|
-| **Frontend Web Console** | [`http://localhost:5173/console`](http://localhost:5173/console) | 3D visual warehouse twin, 2D map, telemetry HUD, control bar |
-| **Backend REST API Health Check** | [`http://localhost:8000/health`](http://localhost:8000/health) | Backend health & diagnostics |
-| **Backend Fleet Snapshot** | [`http://localhost:8000/api/v1/fleet/status`](http://localhost:8000/api/v1/fleet/status) | Live 10 Hz simulation snapshot & telemetry |
-| **Backend WebSocket Stream** | `ws://localhost:8000/ws/fleet` | Bidirectional real-time agent state & event broadcaster |
-| **Backend Swagger API Docs** | [`http://localhost:8000/docs`](http://localhost:8000/docs) | Interactive OpenAPI / Swagger documentation |
+- 🖥️ **Live Interactive Web Prototype:** [https://nexus-fleet.vercel.app](https://nexus-fleet.vercel.app)
+- 📡 **Backend API & Health Status:** [https://nexus-fleet-backend.onrender.com/api/health](https://nexus-fleet-backend.onrender.com/api/health)
+- 📚 **GitHub Documentation:** [https://github.com/karthik-ak-Git/NEXUS-Fleet](https://github.com/karthik-ak-Git/NEXUS-Fleet)
+- 📊 **SIH 2026 Redesigned Presentation:** Included in repository (`SIH_2026_Spark-08_Redesigned.pptx`)
 
 ---
 
-## 🏭 Core System Modules
+## 🚀 Deployment Guide (Vercel & Docker)
 
-### 1. Warehouse Physical Geometry & Aisle Navigation
-- Physical shelf bounding boxes (`Rack A-11` .. `Rack F-46`) defined as strict obstacle spaces.
-- Navigation graph nodes located in open driving corridors with aisle-first approach points.
-- Zero penetration through physical shelf geometry.
+### 1. Vercel Monorepo Deployment (Fix for Vercel Import Screen)
 
-### 2. Multi-Robot Traffic Coordination & Space-Time Reservations
-- Atomic node & edge reservations. When a robot yields or waits, it explicitly reserves its physical footprint so following robots queue safely or reroute.
-- Dynamic deadlock cycle detection & priority arbitration.
+When deploying to Vercel, Vercel detects a monorepo structure. Follow these exact steps depending on your deployment choice:
 
-### 3. Shelf Pickup & Counter Delivery Handshake
-- Shelf approach $\rightarrow$ alignment $\rightarrow$ package pick $\rightarrow$ aisle exit.
-- Delivery counter queueing (`DOCK-01`, `QUEUE-01`, `QUEUE-02`, `QUEUE-03`). Idempotent package acceptance transferring package ownership from robot to counter.
+#### Option A: Deploying Frontend Only (`artifacts/nexus-fleet`)
+1. Click **"Import single project"** next to `nexus-fleet` in the Vercel UI.
+2. In Project Settings:
+   - **Framework Preset:** `Vite`
+   - **Root Directory:** `artifacts/nexus-fleet`
+   - **Build Command:** `pnpm run build`
+   - **Output Directory:** `dist/public`
+3. Add Environment Variables:
+   - `PORT` = `5173`
+   - `BASE_PATH` = `/`
+   - `VITE_API_URL` = `https://nexus-fleet-backend.onrender.com/api`
 
-### 4. Charging & Return-to-Home
-- Dedicated charging slots (`C-01` .. `C-10`). After delivery completion, robots with no queued tasks return directly to home docks (`RETURNING_HOME` $\rightarrow$ `DOCKING` $\rightarrow$ `CHARGING`).
-- Automatic low-battery docking (< 24% battery).
-
-### 5. 2D Operational Map & 3D Digital Twin Synchronization
-- Unified backend `SimulationSnapshot` shared across 2D Canvas and Three.js 3D renderer with synchronized `worldToScreen` and `worldToThree` coordinate mappings.
-- Debug mode overlay rendering shelf bounding boxes, graph nodes, edges, pickup points, robot footprints, and reservation leases.
+#### Option B: Root Monorepo Import
+If importing the repository root directly into Vercel, Vercel will automatically use the included `vercel.json` config at the root.
 
 ---
 
-## 🧪 Automated Test Suite (22 System Tests + 6-AMR End-to-End Test)
+### 2. Docker Container Deployment (Frontend + Backend)
 
-Run the full pytest suite:
+Deploy both services locally or to any cloud VM using Docker Compose:
 
 ```bash
+# Clone the repository
+git clone https://github.com/karthik-ak-Git/NEXUS-Fleet.git
+cd NEXUS-Fleet
+
+# Build and start both containers in detached mode
+docker compose up -d --build
+
+# Verify container status
+docker compose ps
+```
+
+Once running:
+- **Frontend App:** `http://localhost:5173`
+- **Backend API:** `http://localhost:8000/api/health`
+
+---
+
+## 🔑 Production `.env` Configurations
+
+### Frontend Environment (`artifacts/nexus-fleet/.env.production`)
+```env
+PORT=5173
+BASE_PATH=/
+VITE_API_URL=https://nexus-fleet-backend.onrender.com/api
+VITE_WS_URL=wss://nexus-fleet-backend.onrender.com/ws/fleet
+VITE_GEMINI_API_KEY=your_gemini_api_key_here
+```
+
+### Backend Environment (`backend/.env.production`)
+```env
+HOST=0.0.0.0
+PORT=8000
+ENVIRONMENT=production
+LOG_LEVEL=info
+CORS_ORIGINS=https://nexus-fleet.vercel.app,http://localhost:5173
+```
+
+---
+
+## 🧪 Local Development & Verification Commands
+
+```bash
+# Run backend tests (22/22 passed)
 uv run pytest backend/tests
-```
 
-### Verified Test Cases:
-* **TEST 1:** Navigation nodes never inside shelves.
-* **TEST 2:** Navigation edges never pass through shelves.
-* **TEST 3:** Robot footprint never overlaps shelves.
-* **TEST 4:** Shelf pickup occurs from valid approach point.
-* **TEST 5:** Robot exits shelf area after pickup.
-* **TEST 6:** Counter accepts package.
-* **TEST 7:** Task becomes `COMPLETED` only after acceptance.
-* **TEST 8:** Package transfers robot $\rightarrow$ counter.
-* **TEST 9:** Robot clears package after delivery.
-* **TEST 10:** Robot returns to home if no task exists.
-* **TEST 11:** Robot docks at charging station.
-* **TEST 12:** Charging slot cannot be double occupied.
-* **TEST 13:** Waiting robot reserves physical space.
-* **TEST 14:** Another robot cannot enter waiting space.
-* **TEST 15:** Multiple robots queue at counter.
-* **TEST 16:** Queue advances safely.
-* **TEST 17:** No overlapping reservations.
-* **TEST 18:** Deadlock detection works.
-* **TEST 19:** Low battery robot returns to charge.
-* **TEST 20:** 2D and 3D use identical backend coordinates.
-* **TEST 21:** Frontend reconnects correctly.
-* **TEST 22:** 6-Robot end-to-end scenario executes autonomously with 0 collisions.
+# Run frontend typecheck (0 errors)
+pnpm run typecheck
+
+# Start local backend server
+uv run uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
+
+# Start local frontend dev server
+$env:PORT="5173"; $env:BASE_PATH="/"; pnpm --filter @workspace/nexus-fleet dev
+```
 
 ---
 
-## 📦 Docker & Vercel Production Deployment
-
-### Docker Container Deployment
-```bash
-docker build -t nexus-fleet-backend -f Dockerfile .
-docker run -p 8000:8000 nexus-fleet-backend
-```
-
-### Vercel Deployment Configuration
-- `vercel.json` provides API routing and static frontend distribution.
-- Environment variables: `VITE_API_BASE_URL`, `VITE_WS_URL`, `PORT`, `CORS_ALLOWED_ORIGINS`.
+## 📜 License
+Developed by Team **SPARK-08** for **Smart India Hackathon 2026**. Released under the MIT License.
