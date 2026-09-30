@@ -19,7 +19,7 @@ from ..coordination.peer_protocol import PeerNetwork
 from ..agents.robot_agent import RobotAgent, AgentContext
 
 ROBOT_IDS = ["AMR-01", "AMR-02", "AMR-03", "AMR-04", "AMR-05", "AMR-06", "AMR-07", "AMR-08", "AMR-09", "AMR-10"]
-STARTING_NODES = ["N-0-2", "N-1-1", "N-2-1", "N-3-1", "N-4-1", "N-5-2", "N-0-6", "N-1-7", "N-2-7", "N-4-7"]
+STARTING_NODES = ["N-0-1", "N-1-0", "N-2-0", "N-3-0", "N-4-0", "N-5-1", "N-0-7", "N-1-8", "N-4-8", "N-5-7"]
 PRIORITIES = [0.95, 0.88, 0.82, 0.75, 0.68, 0.62, 0.58, 0.52, 0.45, 0.40]
 
 class SimulationEngine:

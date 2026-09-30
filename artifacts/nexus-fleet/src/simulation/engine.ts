@@ -123,16 +123,16 @@ export class SimulationEngine {
     this.tasks = [];
 
     const starts = [
-      nodeId(0, 2),
-      nodeId(1, 1),
-      nodeId(2, 1),
-      nodeId(3, 1),
-      nodeId(4, 1),
-      nodeId(5, 2),
-      nodeId(0, 6),
-      nodeId(1, 7),
-      nodeId(2, 7),
-      nodeId(4, 7),
+      nodeId(0, 1),
+      nodeId(1, 0),
+      nodeId(2, 0),
+      nodeId(3, 0),
+      nodeId(4, 0),
+      nodeId(5, 1),
+      nodeId(0, 7),
+      nodeId(1, 8),
+      nodeId(4, 8),
+      nodeId(5, 7),
     ];
     for (let index = 0; index < this.robotCount; index += 1) {
       const id = ROBOT_IDS[index] ?? `AMR-${String(index + 1).padStart(2, "0")}`;

@@ -508,20 +508,22 @@ export class RobotAgent {
       }
     }
 
-    // 360° LiDAR & Proximity Sensor Safety Check: yield right-of-way if within 1.25m of another active robot
-    for (const other of context.robots) {
-      if (other.id === this.state.id || other.health === "FAILED") continue;
-      const dist = Math.hypot(this.state.x - other.x, this.state.y - other.y);
-      if (dist < 1.25) {
-        const ownPriority = this.priorityScore(now);
-        const otherPriority = other.taskPriority ?? 0;
-        const wins = ownPriority > otherPriority ||
-          (Math.abs(ownPriority - otherPriority) < 0.0001 && this.state.id.localeCompare(other.id) < 0);
-        if (!wins) {
-          this.state.status = "YIELDING";
-          this.state.velocity = 0;
-          this.state.reason = `360° Proximity Sensor Alert: yielding right-of-way to ${other.id} (${dist.toFixed(2)}m).`;
-          break;
+    // 360° LiDAR & Proximity Sensor Safety Check (Active Motion Only)
+    if (this.state.currentTaskId || this.state.velocity > 0) {
+      for (const other of context.robots) {
+        if (other.id === this.state.id || other.health === "FAILED") continue;
+        const dist = Math.hypot(this.state.x - other.x, this.state.y - other.y);
+        if (dist < 1.15 && (other.currentTaskId || (other.velocity ?? 0) > 0)) {
+          const ownPriority = this.priorityScore(now);
+          const otherPriority = other.taskPriority ?? 0;
+          const wins = ownPriority > otherPriority ||
+            (Math.abs(ownPriority - otherPriority) < 0.0001 && this.state.id.localeCompare(other.id) < 0);
+          if (!wins) {
+            this.state.status = "YIELDING";
+            this.state.velocity = 0;
+            this.state.reason = `360° Proximity Sensor Alert: yielding right-of-way to ${other.id} (${dist.toFixed(2)}m).`;
+            break;
+          }
         }
       }
     }
