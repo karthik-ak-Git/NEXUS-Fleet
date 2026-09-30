@@ -164,7 +164,7 @@ function WarehouseRacks() {
         [-6, -2, 2, 6].map((z, row) => ({
           id: `R-${String(row * 6 + column + 1).padStart(2, "0")}`,
           x,
-          z,
+          z: z + (row % 2 === 0 ? 1.25 : -1.25),
         })),
       ),
     [],
@@ -249,7 +249,7 @@ function Robot({ robot, nodes, selected, onSelect }: {
       : 0.22;
 
   // Forklift arm extends sideways towards shelf when picking
-  const armExtension = isPickingPhase ? 0.38 : 0.08;
+  const armExtension = isPickingPhase ? 0.68 : 0.08;
 
   // Packages are only carried AFTER picking item from shelf
   const isCarryingPackage = isDeliveringPhase || (Boolean(robot.currentTaskId) && !isPickingPhase);
@@ -430,6 +430,48 @@ function ResourceOverlays({ edges, nodes, reservations, obstacles }: {
             <meshBasicMaterial color="#b74b43" transparent opacity={0.75} />
           </mesh>
         </group>
+      ))}
+    </group>
+  );
+}
+
+function InterlinkConnections({ robots }: { robots: Datum[] }) {
+  const activeRobots = useMemo(
+    () => robots.filter((r) => String(r.health ?? "").toUpperCase() !== "FAILED" && String(r.communication ?? "").toUpperCase() !== "OFFLINE"),
+    [robots],
+  );
+  const links = useMemo(() => {
+    const result: [Datum, Datum][] = [];
+    for (let i = 0; i < activeRobots.length; i += 1) {
+      for (let j = i + 1; j < activeRobots.length; j += 1) {
+        const r1 = activeRobots[i];
+        const r2 = activeRobots[j];
+        const dist = Math.hypot(Number(r1.x ?? 0) - Number(r2.x ?? 0), Number(r1.y ?? 0) - Number(r2.y ?? 0));
+        if (dist <= 20.0 && (r1.status !== "IDLE" || r2.status !== "IDLE")) {
+          result.push([r1, r2]);
+        }
+      }
+    }
+    return result;
+  }, [activeRobots]);
+
+  return (
+    <group>
+      {links.map(([r1, r2]) => (
+        <Line
+          key={`${r1.id}-${r2.id}`}
+          points={[
+            [Number(r1.x ?? 0), 0.35, Number(r1.y ?? 0)],
+            [Number(r2.x ?? 0), 0.35, Number(r2.y ?? 0)],
+          ]}
+          color="#3db89a"
+          lineWidth={0.8}
+          dashed
+          dashSize={0.4}
+          gapSize={0.3}
+          transparent
+          opacity={0.38}
+        />
       ))}
     </group>
   );
@@ -622,6 +664,7 @@ export function WarehouseScene3D({
           <Floor />
           <WarehouseRacks />
           <ResourceOverlays edges={edges} nodes={nodeMap} reservations={reservations} obstacles={obstacles} />
+          <InterlinkConnections robots={robots} />
           {robots.map((robot) => (
             <Robot
               key={robot.id}

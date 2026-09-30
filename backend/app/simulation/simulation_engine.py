@@ -78,7 +78,7 @@ class SimulationEngine:
             s_node = STARTING_NODES[i % len(STARTING_NODES)]
             n_obj = self.node_map[s_node]
             agent = RobotAgent(rid, s_node, n_obj)
-            res = self.reserve(s_node, rid, 0.0, 999999.0, PRIORITIES[i])
+            res = self.reserve(s_node, rid, 0.0, 10.0, 0.0)
             if res:
                 agent.local_reservation_id = res.id
                 agent.state.currentReservation = res.id
@@ -157,7 +157,7 @@ class SimulationEngine:
                 e.endTime = max(e.endTime, end_time)
                 e.priority = max(e.priority, priority)
                 return e
-            if e.priority < priority and self.sim_time - e.startTime < 1.0:
+            if e.priority < priority:
                 e.status = "EXPIRED"
                 self.emit_event(owner_robot, "RESERVATION_MODIFIED", f"Preempted reservation {e.id} on {resource_id} with higher priority.", resource_id, f"Priority {priority:.2f} > {e.priority:.2f}")
             elif e.ownerRobot != owner_robot:
@@ -226,6 +226,8 @@ class SimulationEngine:
             bids=[]
         )
         self.tasks.append(task)
+        self.running = True
+        self.last_auction_at = -10.0
         self.emit_event(None, "TASK_CREATED", f"User dispatched {t_id} at pickup {pick}.", pick, "Auction opened to peer fleet.")
         return task
 
@@ -464,8 +466,13 @@ class SimulationEngine:
 
     def get_snapshot(self) -> SimulationSnapshotSchema:
         latest = None
+        sanitized_robots = []
         for a in self.agents:
-            if a.state.decisionHistory:
+            st = a.state.model_copy()
+            if len(st.decisionHistory) > 5:
+                st.decisionHistory = st.decisionHistory[-5:]
+            sanitized_robots.append(st)
+            if a.state.decisionHistory and not latest:
                 last_d = a.state.decisionHistory[-1]
                 latest = LatestDecisionSchema(
                     robotId=a.state.id,
@@ -478,17 +485,16 @@ class SimulationEngine:
                     waitCost=a.state.waitSeconds,
                     selectedAction=last_d.action
                 )
-                break
 
         return SimulationSnapshotSchema(
             running=self.running,
             time=self.sim_time,
             mode=self.mode,
             speed=self.speed,
-            robots=[a.state for a in self.agents],
+            robots=sanitized_robots,
             tasks=self.tasks,
-            events=self.events,
-            conflicts=self.conflicts,
+            events=self.events[-30:],
+            conflicts=self.conflicts[-20:],
             blockedEdges=list(self.blocked_edges),
             reservations=[r for r in self.reservations if r.status == "ACTIVE"],
             obstacles=self.obstacles,
