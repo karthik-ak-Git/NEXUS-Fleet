@@ -2,10 +2,9 @@ import { useMemo, useState } from 'react';
 import { useLocation } from 'wouter';
 import {
   Activity, AlertOctagon, ArrowDownRight, ArrowUpRight, Battery, Bot,
-  Boxes, ChevronDown, CircleHelp, Clock3, Command, Gauge, Layers3,
-  MapPinned, Menu, Pause, Play, Plus, Radio, RotateCcw, Route,
-  ShieldCheck, Signal, Siren, SlidersHorizontal, Sparkles, Target,
-  TimerReset, Zap,
+  Boxes, ChevronDown, CircleHelp, Clock3, Layers, MapPinned, Menu,
+  Pause, Play, Plus, Radio, RotateCcw, Route, ShieldCheck, Signal,
+  Sparkles, Target, Zap
 } from 'lucide-react';
 import { useSimulation } from '../simulation/useSimulation';
 import { WarehouseScene3D } from './WarehouseScene3D';
@@ -20,37 +19,6 @@ const groceryProducts = [
   { id: 'oil', name: 'Extra Virgin Olive Oil 500ml', rack: 'Rack D-14', pickup: 'N-2-2', sku: 'SKU-D14-OLIVE_OIL', category: 'Pantry', icon: '🫒' },
   { id: 'coffee', name: 'Dark Roasted Coffee Beans', rack: 'Rack E-15', pickup: 'N-3-1', sku: 'SKU-E15-ROASTED_COFFEE', category: 'Beverages', icon: '☕' },
   { id: 'chocolate', name: '70% Dark Chocolate Bar', rack: 'Rack B-14', pickup: 'N-3-2', sku: 'SKU-B14-CHOCOLATE_BAR', category: 'Snacks', icon: '🍫' },
-];
-
-const scenarios = [
-  ['normal', 'Nominal operation'],
-  ['head-on', 'Head-on encounter'],
-  ['intersection', 'Intersection negotiation'],
-  ['blocked-aisle', 'Blocked aisle recovery'],
-  ['deadlock', 'Deadlock recovery'],
-  ['communication-loss', 'Communication loss'],
-  ['robot-failure', 'Robot failure'],
-  ['low-battery', 'Low battery return'],
-  ['obstacle', 'Dynamic obstacle'],
-  ['high-congestion', 'High congestion'],
-  ['task-burst', 'Task burst'],
-  ['multi-failure', 'Multi-failure'],
-  ['stress-test', 'Stress test'],
-];
-
-const disturbances = [
-  ['block-aisle', 'Block an aisle'],
-  ['communication-loss', 'Communication loss'],
-  ['robot-failure', 'Robot failure'],
-  ['low-battery', 'Low battery'],
-  ['obstacle', 'Place an obstacle'],
-  ['conflict', 'Create a conflict'],
-];
-
-const rackBlocks = [
-  [140, 112, 136, 74], [140, 208, 136, 74], [140, 304, 136, 74], [140, 400, 136, 74],
-  [371, 112, 136, 74], [371, 208, 136, 74], [371, 304, 136, 74], [371, 400, 136, 74],
-  [602, 112, 136, 74], [602, 208, 136, 74], [602, 304, 136, 74], [602, 400, 136, 74],
 ];
 
 function str(value: unknown, fallback = '—') {
@@ -79,160 +47,72 @@ function shortTime(value: unknown) {
 
 function statusTone(value: unknown) {
   const status = String(value ?? '').toLowerCase();
-  if (/error|fail|dead|blocked|critical|collision|lost|offline/.test(status)) return 'tone-danger';
-  if (/wait|yield|charge|low|warn|conflict|paused|recover|rerout/.test(status)) return 'tone-warn';
-  if (/complete|idle|ready|online|healthy|resolved/.test(status)) return 'tone-good';
-  return 'tone-active';
+  if (/error|fail|dead|blocked|critical|collision|lost|offline/.test(status)) return 'bg-rose-500/20 text-rose-300 border-rose-500/40';
+  if (/wait|yield|charge|low|warn|conflict|paused|recover|rerout/.test(status)) return 'bg-amber-500/20 text-amber-300 border-amber-500/40';
+  if (/complete|idle|ready|online|healthy|resolved/.test(status)) return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
+  return 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40';
 }
 
-function MetricTile({ label, value, unit, icon: Icon, note, tone = 'default' }: {
-  label: string; value: unknown; unit?: string; icon: typeof Activity; note?: string; tone?: string;
+function MetricTile({ label, value, unit, icon: Icon, note }: {
+  label: string; value: unknown; unit?: string; icon: typeof Activity; note?: string;
 }) {
   return (
-    <article className={`metric-tile ${tone}`} data-testid={`metric-${label.toLowerCase().replaceAll(' ', '-')}`}>
-      <div className="metric-top"><span>{label}</span><Icon size={15} strokeWidth={1.8} /></div>
-      <div className="metric-number">{str(value, '0')}<small>{unit}</small></div>
-      {note && <div className="metric-note">{note}</div>}
-    </article>
+    <div className="bg-[#17221f] border border-[#283834] rounded-xl p-4 shadow-lg space-y-1">
+      <div className="flex items-center justify-between text-xs text-[#8aa39b] font-medium">
+        <span>{label}</span>
+        <Icon size={16} className="text-[#3db89a]" />
+      </div>
+      <div className="text-2xl font-extrabold text-white tracking-tight flex items-baseline gap-1">
+        <span>{str(value, '0')}</span>
+        {unit && <small className="text-xs font-normal text-[#8aa39b]">{unit}</small>}
+      </div>
+      {note && <div className="text-[11px] text-[#8aa39b] font-mono">{note}</div>}
+    </div>
   );
 }
 
-function FleetMap({ robots, nodes, blockedEdges, obstacles, reservations, selectedId, onSelect }: {
-  robots: Datum[]; nodes: Datum[]; blockedEdges: Datum[]; obstacles: Datum[]; reservations: Datum[];
-  selectedId: string | null; onSelect: (id: string) => void;
+function PlanView2D({ robots, nodes, selectedId, onSelect }: {
+  robots: Datum[]; nodes: Datum[]; selectedId: string | null; onSelect: (id: string) => void;
 }) {
-  const nodeMap = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
-  const allPoints = useMemo(() => {
-    const result: Point[] = nodes.map((node) => ({ x: Number(node.x), y: Number(node.y) }));
-    robots.forEach((robot) => {
-      const p = pointOf(robot); if (p) result.push(p);
-      if (Array.isArray(robot.route)) robot.route.forEach((item: any) => {
-        const routePoint = pointOf(typeof item === 'string' ? nodeMap.get(item) : item);
-        if (routePoint) result.push(routePoint);
-      });
-    });
-    obstacles.forEach((obstacle) => { const p = pointOf(obstacle); if (p) result.push(p); });
-    return result;
-  }, [robots, nodes, nodeMap, obstacles]);
-  const bounds = useMemo(() => {
-    if (!allPoints.length) return { minX: 0, maxX: 100, minY: 0, maxY: 60 };
-    const xs = allPoints.map((p) => p.x); const ys = allPoints.map((p) => p.y);
-    const minX = Math.min(...xs); const maxX = Math.max(...xs);
-    const minY = Math.min(...ys); const maxY = Math.max(...ys);
-    return {
-      minX: minX - (maxX === minX ? 10 : (maxX - minX) * .1),
-      maxX: maxX + (maxX === minX ? 10 : (maxX - minX) * .1),
-      minY: minY - (maxY === minY ? 7 : (maxY - minY) * .1),
-      maxY: maxY + (maxY === minY ? 7 : (maxY - minY) * .1),
-    };
-  }, [allPoints]);
-  const project = (p: Point) => ({
-    x: 52 + ((p.x - bounds.minX) / (bounds.maxX - bounds.minX)) * 796,
-    y: 51 + ((p.y - bounds.minY) / (bounds.maxY - bounds.minY)) * 402,
-  });
-  const resolvePoint = (value: any) =>
-    pointOf(typeof value === 'string' ? nodeMap.get(value) : value);
-  const edgeEnds = (edge: Datum) => {
-    const from = resolvePoint(edge.from ?? edge.start ?? edge.a);
-    const to = resolvePoint(edge.to ?? edge.end ?? edge.b);
-    if (from && to) return [project(from), project(to)];
-    return null;
-  };
-
+  const nodeMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
   return (
-    <div className="map-viewport scrollbar-thin">
-      <svg className="warehouse-map" viewBox="0 0 900 500" role="img" aria-label="Live warehouse fleet map">
-        <defs>
-          <pattern id="mapGrid" width="20" height="20" patternUnits="userSpaceOnUse">
-            <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#789088" strokeOpacity=".12" strokeWidth=".7" />
-          </pattern>
-          <pattern id="rackHatch" width="7" height="7" patternUnits="userSpaceOnUse">
-            <path d="M0 7L7 0" stroke="#7b887e" strokeOpacity=".15" strokeWidth=".8" />
-          </pattern>
-          <filter id="robotShadow" x="-100%" y="-100%" width="300%" height="300%">
-            <feDropShadow dx="0" dy="2" stdDeviation="2" floodColor="#19332c" floodOpacity=".2" />
-          </filter>
-        </defs>
-        <rect width="900" height="500" fill="#ebe9dd" />
-        <rect width="900" height="500" fill="url(#mapGrid)" />
-        <rect x="26" y="25" width="848" height="450" rx="2" fill="none" stroke="#75847a" strokeOpacity=".46" strokeDasharray="3 4" />
-        <path d="M40 74H860 M40 167H860 M40 263H860 M40 359H860 M40 452H860" stroke="#b4b6a8" strokeWidth="1" strokeDasharray="6 8" />
-        {rackBlocks.map(([x, y, w, h], index) => (
-          <g key={`rack-${index}`}>
-            <rect x={x} y={y} width={w} height={h} rx="2" fill="#cdd0c2" stroke="#8b978c" strokeWidth="1" />
-            <rect x={x + 4} y={y + 4} width={w - 8} height={h - 8} fill="url(#rackHatch)" />
-            <path d={`M${x + 12} ${y + 9}V${y + h - 9}M${x + w - 12} ${y + 9}V${y + h - 9}`} stroke="#829087" strokeWidth="1" />
-            <text x={x + w / 2} y={y + h / 2 + 3} textAnchor="middle" className="svg-rack-label">R-{String(index + 1).padStart(2, '0')}</text>
+    <div className="w-full h-[460px] bg-[#111816] rounded-xl border border-[#283834] p-4 relative overflow-hidden flex items-center justify-center">
+      <svg className="w-full h-full" viewBox="-15 -10 30 20">
+        <rect x="-14.5" y="-9.5" width="29" height="19" fill="#17221f" stroke="#283834" strokeWidth="0.2" rx="0.5" />
+        {/* Warehouse Nodes */}
+        {nodes.map((node) => (
+          <g key={node.id} transform={`translate(${node.x} ${node.y})`}>
+            <circle r="0.3" fill={node.kind === 'packing' ? '#3db89a' : node.kind === 'charger' ? '#38bdf8' : '#283834'} />
+            <text y="-0.5" fontSize="0.4" fill="#8aa39b" textAnchor="middle" className="font-mono">{node.label}</text>
           </g>
         ))}
-        <g className="svg-zone">
-          <rect x="38" y="80" width="71" height="350" rx="2" fill="#dfd8c5" stroke="#afa68e" />
-          <text x="73" y="256" transform="rotate(-90 73 256)" textAnchor="middle">INBOUND / PICK FACE</text>
-          <rect x="777" y="80" width="84" height="350" rx="2" fill="#dfd8c5" stroke="#afa68e" />
-          <text x="819" y="256" transform="rotate(-90 819 256)" textAnchor="middle">OUTBOUND / STAGING</text>
-        </g>
-        <g className="svg-aisle-labels">
-          <text x="303" y="95">AISLE 01</text><text x="534" y="95">AISLE 02</text>
-          <text x="303" y="462">AISLE 03</text><text x="534" y="462">AISLE 04</text>
-        </g>
+        {/* Robots */}
         {robots.map((robot) => {
-          const p = pointOf(robot); if (!p) return null;
-          const xy = project(p);
-          const id = str(robot.id);
-          const selected = id === selectedId;
-          const tone = statusTone(robot.state);
-      const routePoints = Array.isArray(robot.route) ? robot.route.map(resolvePoint).filter(Boolean) as Point[] : [];
-          const linePoints = [p, ...routePoints].map((pt) => {
-            const mapped = project(pt); return `${mapped.x},${mapped.y}`;
-          }).join(' ');
-          const heading = Number(robot.heading) || 0;
+          const isSelected = str(robot.id) === selectedId;
           return (
-            <g key={id} className="map-robot" onClick={() => onSelect(id)} role="button" tabIndex={0}
-              onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') onSelect(id); }}
-              aria-label={`Select robot ${id}`} data-testid={`map-robot-${id}`}>
-              {routePoints.length > 0 && <polyline points={linePoints} fill="none" stroke={selected ? '#bf8b24' : '#167a68'} strokeWidth={selected ? 2.5 : 1.7} strokeDasharray="5 5" opacity=".8" />}
-              <circle cx={xy.x} cy={xy.y} r={selected ? 15 : 11} fill={selected ? '#f7d578' : '#f6f2e6'} opacity=".8" />
-              <g transform={`translate(${xy.x} ${xy.y}) rotate(${heading})`} filter="url(#robotShadow)">
-                <rect x="-8" y="-8" width="16" height="16" rx="4" className={`robot-body ${tone}`} />
-                <path d="M0 -6L4 1H-4Z" fill="#fff8e5" />
-              </g>
-              <circle cx={xy.x + 8} cy={xy.y - 8} r="3.2" className={`robot-state-dot ${tone}`} />
-              <text x={xy.x} y={xy.y + 24} textAnchor="middle" className={`robot-id ${selected ? 'is-selected' : ''}`}>{id}</text>
+            <g
+              key={str(robot.id)}
+              transform={`translate(${robot.x ?? 0} ${robot.y ?? 0})`}
+              onClick={() => onSelect(str(robot.id))}
+              className="cursor-pointer"
+            >
+              <circle r={isSelected ? '0.9' : '0.7'} fill={isSelected ? '#f59e0b' : '#2e8b75'} opacity="0.4" />
+              <circle r="0.5" fill={isSelected ? '#f59e0b' : '#3db89a'} stroke="#ffffff" strokeWidth="0.1" />
+              <text y="0.15" fontSize="0.3" fill="#ffffff" fontWeight="bold" textAnchor="middle" className="font-mono">
+                {str(robot.id).replace('AMR-', '')}
+              </text>
             </g>
           );
         })}
-        {blockedEdges.map((edge, index) => {
-          const ends = edgeEnds(edge); if (!ends) return null;
-          return <g key={`blocked-${index}`}><line x1={ends[0].x} y1={ends[0].y} x2={ends[1].x} y2={ends[1].y} stroke="#ba473e" strokeWidth="7" strokeLinecap="round" opacity=".7" /><line x1={ends[0].x} y1={ends[0].y} x2={ends[1].x} y2={ends[1].y} stroke="#f3ddc6" strokeWidth="1.4" strokeDasharray="4 4" /></g>;
-        })}
-        {obstacles.map((obstacle, index) => {
-          const p = pointOf(obstacle); if (!p) return null;
-          const xy = project(p);
-          return <g key={`obstacle-${index}`} transform={`translate(${xy.x} ${xy.y})`}><circle r="12" fill="#bd584b" fillOpacity=".17" /><path d="M-5 -5L5 5M5 -5L-5 5" stroke="#a33f38" strokeWidth="2.5" /><circle r="8" fill="none" stroke="#a33f38" strokeDasharray="2 3" /></g>;
-        })}
-        {reservations.slice(0, 12).map((reservation, index) => {
-          const p = pointOf(reservation); if (!p) return null;
-          const xy = project(p);
-          return <circle key={`reservation-${index}`} cx={xy.x} cy={xy.y} r="11" fill="none" stroke="#b38c36" strokeDasharray="2 3" strokeWidth="1.4" />;
-        })}
-        <g transform="translate(46 446)">
-          <circle cx="0" cy="0" r="7" fill="#167a68" /><text x="14" y="3" className="map-legend-label">ACTIVE AGENT</text>
-          <circle cx="128" cy="0" r="7" fill="#c69a38" /><text x="142" y="3" className="map-legend-label">YIELD / WAIT</text>
-          <circle cx="264" cy="0" r="7" fill="#bb554b" /><text x="278" y="3" className="map-legend-label">FAULT / BLOCK</text>
-        </g>
       </svg>
     </div>
   );
 }
 
-function FleetConsole() {
+export function FleetConsole() {
   const [, setLocation] = useLocation();
-  const { state, start, pause, reset, setSpeed, setScenario, inject, createTask, runBenchmark, runStressTest, runDemo, selectRobot } = useSimulation();
-  const [scenario, setScenarioLocal] = useState('normal');
-  const [disturbance, setDisturbance] = useState('block-aisle');
-  const [query, setQuery] = useState('');
-  const [activeNav, setActiveNav] = useState('overview');
-  const [mobileMenu, setMobileMenu] = useState(false);
+  const { state, start, pause, reset, setSpeed, createTask, selectRobot } = useSimulation();
+
   const [mapMode, setMapMode] = useState<'3d' | 'plan'>('3d');
   const [followRobot, setFollowRobot] = useState(false);
   const [topView, setTopView] = useState(false);
@@ -284,6 +164,7 @@ function FleetConsole() {
     createTask(selectedProduct.pickup, selectedProduct.sku, nearestIdleRobot?.id);
     setIsTaskModalOpen(false);
   };
+
   const tasks: Datum[] = (Array.isArray(data?.tasks) ? data.tasks : []).map((task: Datum) => ({
     ...task,
     pickup: nodeLabels.get(task.pickup) ?? task.pickup,
@@ -294,278 +175,392 @@ function FleetConsole() {
   const conflicts: Datum[] = Array.isArray(data?.conflicts) ? data.conflicts : [];
   const metrics: Datum = data?.metrics ?? {};
   const selectedRobot = robots.find((robot) => str(robot.id) === data?.selectedRobotId) ?? null;
-  const filteredRobots = robots.filter((robot) => str(robot.id).toLowerCase().includes(query.toLowerCase()));
-  const activeCount = metrics.activeRobots ?? robots.filter((robot) => /active|moving|working|navigat/.test(String(robot.state).toLowerCase())).length;
+  const activeCount = metrics.activeRobots ?? robots.filter((robot) => /active|moving|working|navigat|pick/i.test(String(robot.state))).length;
   const isRunning = Boolean(data?.running);
 
-  const navTo = (section: string) => {
-    setActiveNav(section);
-    setMobileMenu(false);
-    document.getElementById(`section-${section}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-  const chooseScenario = (value: string) => {
-    setScenarioLocal(value);
-    setScenario(value);
-  };
-  const currentBenchmark = data?.benchmark;
-  const priorityLabel = (priority: unknown) => {
-    const value = Number(priority);
-    return value >= .85 ? 'HIGH' : value >= .65 ? 'MEDIUM' : 'STANDARD';
-  };
-
   return (
-    <main className="fleet-app grain" data-testid="fleet-console">
-      <aside className={`sidebar ${mobileMenu ? 'sidebar-open' : ''}`}>
-        <div className="brand-lockup">
-          <div className="brand-mark"><span>N</span><i /></div>
-          <div><strong>NEXUS<span> / FLEET</span></strong><small>COORDINATION SYSTEM</small></div>
+    <div className="min-h-screen bg-[#111816] text-[#e3e8e5] font-sans flex flex-col">
+      {/* Top Navbar matching Landing Page */}
+      <nav className="border-b border-[#283834] bg-[#17221f]/90 backdrop-blur sticky top-0 z-50 px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 rounded-lg bg-[#2e8b75] flex items-center justify-center font-bold text-white text-xl shadow-lg">
+            N
+          </div>
+          <div>
+            <h1 className="font-bold text-lg leading-none tracking-wide text-white">NEXUS-Fleet</h1>
+            <span className="text-xs text-[#8aa39b] font-mono">SIH26123 · Distributed AMR Platform</span>
+          </div>
         </div>
-        <div className="facility-switch">
-          <div className="facility-icon"><Layers3 size={16} /></div>
-          <div><small>FACILITY</small><strong>BEL · Ghaziabad DC</strong></div>
-          <ChevronDown size={14} />
+
+        <div className="flex items-center space-x-6 text-sm font-medium">
+          <button onClick={() => setLocation('/')} className="text-[#9cb5ac] hover:text-white transition-colors">
+            Overview
+          </button>
+          <button onClick={() => setLocation('/docs')} className="text-[#9cb5ac] hover:text-white transition-colors">
+            Documentation
+          </button>
+          <button onClick={() => setLocation('/console')} className="text-[#3db89a] border-b-2 border-[#3db89a] pb-1 font-semibold">
+            3D Fleet Console
+          </button>
         </div>
-        <div className="side-label">OPERATIONS</div>
-        <nav className="side-nav" aria-label="Workspace navigation">
-          {[
-            { id: 'overview', label: 'Live overview', icon: MapPinned },
-            { id: 'fleet', label: 'Robot fleet', icon: Bot, count: robots.length },
-            { id: 'tasks', label: 'Task queue', icon: Boxes, count: metrics.activeTasks ?? tasks.length },
-            { id: 'events', label: 'Event stream', icon: Activity },
-          ].map(({ id, label, icon: Icon, count }) => (
-            <button key={id} type="button" className={`side-nav-item ${activeNav === id ? 'active' : ''}`}
-              onClick={() => navTo(id)} data-testid={`nav-${id}`}>
-              <Icon size={17} strokeWidth={1.8} /><span>{label}</span>{count !== undefined && <b>{count}</b>}
+
+        <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2 bg-[#1f302b] border border-[#2e8b75]/40 text-[#42d4b0] px-3 py-1 rounded-full text-xs font-mono">
+            <span className={`w-2 h-2 rounded-full ${isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+            <span>{isRunning ? 'SIMULATION LIVE' : 'SIMULATION PAUSED'}</span>
+          </div>
+          <div className="text-xs font-mono text-[#8aa39b] bg-[#17221f] px-3 py-1 rounded-lg border border-[#283834]">
+            SIM TIME: <strong className="text-white">{shortTime(data?.time)}</strong>
+          </div>
+        </div>
+      </nav>
+
+      {/* Main Workspace Body */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-6 space-y-6">
+        {/* Top Control Bar - Clean & Essential Controls Only */}
+        <section className="bg-[#17221f] border border-[#283834] rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-xl">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => isRunning ? pause() : start()}
+              className={`px-5 py-2.5 rounded-lg font-bold text-sm flex items-center space-x-2 transition-all shadow-md ${
+                isRunning
+                  ? 'bg-amber-600 hover:bg-amber-500 text-white'
+                  : 'bg-[#2e8b75] hover:bg-[#38a38a] text-white shadow-emerald-950/50'
+              }`}
+            >
+              {isRunning ? <Pause size={16} /> : <Play size={16} fill="currentColor" />}
+              <span>{isRunning ? 'Pause Simulation' : 'Resume Simulation'}</span>
             </button>
-          ))}
-        </nav>
-        <div className="side-label sim-label">SIMULATION LAB</div>
-        <div className="side-nav">
-          <button type="button" className="side-nav-item" onClick={() => { runBenchmark(); navTo('benchmark'); }} data-testid="button-benchmark-nav"><Gauge size={17} /><span>Benchmarks</span><ArrowUpRight size={13} className="nav-arrow" /></button>
-          <button type="button" className="side-nav-item" onClick={() => runDemo()} data-testid="button-demo-nav"><Sparkles size={17} /><span>Guided demo</span><ArrowUpRight size={13} className="nav-arrow" /></button>
-        </div>
-        <div className="sidebar-spacer" />
-        <div className="protocol-card">
-          <div className="protocol-heading"><span className="protocol-dot" /> SYSTEM LINK</div>
-          <div className="protocol-row"><span>Fleet bus</span><strong><i /> nominal</strong></div>
-          <div className="protocol-row"><span>Planner</span><strong><i /> available</strong></div>
-          <div className="protocol-row"><span>Safety layer</span><strong><i /> engaged</strong></div>
-          <div className="protocol-footer"><span>BUILD 0.9.26-SIH</span><span>ZONE 05:IST</span></div>
-        </div>
-        <div className="operator-card">
-          <div className="operator-avatar">OP</div><div><strong>Operations desk</strong><small>CONTROL ROOM · L2</small></div>
-          <CircleHelp size={16} />
-        </div>
-      </aside>
 
-      <section className="workspace">
-        <header className="topbar">
-          <button type="button" className="mobile-menu" onClick={() => setMobileMenu(!mobileMenu)} aria-label="Toggle menu" data-testid="button-mobile-menu"><Menu size={19} /></button>
-          <div className="breadcrumb">
-            <button onClick={() => setLocation('/')} className="hover:text-emerald-400 transition-colors cursor-pointer mr-1">OVERVIEW</button>
-            <b>/</b>
-            <button onClick={() => setLocation('/docs')} className="hover:text-emerald-400 transition-colors cursor-pointer mx-1 font-semibold">DOCS</button>
-            <b>/</b>
-            <strong className="ml-1 text-emerald-400 font-mono">3D CONSOLE</strong>
-          </div>
-          <div className="topbar-right">
-            <div className="clock-readout"><span>SIM TIME</span><strong className="mono">{shortTime(data?.time)}</strong></div>
-            <div className="topbar-divider" />
-            <div className="live-indicator"><span className={`live-dot ${isRunning ? 'pulse-dot' : 'is-paused'}`} /><span>{isRunning ? 'SIMULATION LIVE' : 'SIMULATION PAUSED'}</span></div>
-            <button type="button" className="icon-button help-button" title="Environment controls only" aria-label="Environment controls information" data-testid="button-control-info"><CircleHelp size={17} /></button>
-          </div>
-        </header>
+            <button
+              type="button"
+              onClick={() => reset()}
+              className="px-4 py-2.5 rounded-lg bg-[#1a2724] hover:bg-[#233531] border border-[#283834] text-sm font-semibold text-[#e3e8e5] flex items-center space-x-2 transition-all"
+            >
+              <RotateCcw size={15} />
+              <span>Reset Fleet</span>
+            </button>
 
-        <div className="page-content">
-          <section className="page-heading" id="section-overview">
-            <div>
-              <div className="eyebrow"><span className="eyebrow-line" /> DIGITAL TWIN <span className="eyebrow-sep">/</span> ENVIRONMENT 01</div>
-              <h1>Warehouse <em>operations</em></h1>
-              <p>Observe autonomous coordination across the floor. Robots negotiate, route and recover independently.</p>
+            <div className="h-6 w-px bg-[#283834] mx-1" />
+
+            {/* Speed Multiplier */}
+            <div className="flex items-center bg-[#111816] rounded-lg p-1 border border-[#283834] text-xs font-mono">
+              <span className="px-2 text-[#8aa39b] font-sans font-medium">Speed:</span>
+              {[1, 2, 4].map((speed) => (
+                <button
+                  key={speed}
+                  type="button"
+                  onClick={() => setSpeed(speed)}
+                  className={`px-2.5 py-1 rounded font-bold transition-all ${
+                    Number(data?.speed ?? 1) === speed
+                      ? 'bg-[#2e8b75] text-white shadow'
+                      : 'text-[#8aa39b] hover:text-white'
+                  }`}
+                >
+                  {speed}×
+                </button>
+              ))}
             </div>
-            <div className="heading-actions">
-              <button type="button" className="button-secondary" onClick={() => { reset(); setScenarioLocal('normal'); }} data-testid="button-reset"><RotateCcw size={14} /> Reset run</button>
-              <button type="button" className="button-primary" onClick={() => isRunning ? pause() : start()} data-testid="button-simulation-toggle">
-                {isRunning ? <Pause size={14} /> : <Play size={14} fill="currentColor" />}
-                {isRunning ? 'Pause simulation' : 'Resume simulation'}
-              </button>
-            </div>
-          </section>
+          </div>
 
-          <section className="metrics-strip" aria-label="Fleet performance metrics">
-            <MetricTile label="Active robots" value={activeCount} unit={`/ ${robots.length}`} icon={Bot} note="Fleet availability" tone="metric-teal" />
-             <MetricTile label="Tasks complete" value={metrics.completedTasks} icon={Target} note={`${metrics.activeTasks ?? activeTasks.length} currently active`} />
-            <MetricTile label="Aisle conflicts" value={metrics.conflicts ?? conflicts.length} icon={Route} note={`${metrics.deadlocks ?? 0} deadlocks`} tone={(metrics.conflicts ?? conflicts.length) > 0 ? 'metric-amber' : ''} />
-            <MetricTile label="Blocked aisles" value={metrics.blockedAisles ?? (data?.blockedEdges?.length ?? 0)} icon={AlertOctagon} note={`${metrics.reroutes ?? 0} route adaptations`} tone={(metrics.blockedAisles ?? 0) > 0 ? 'metric-red' : ''} />
-            <MetricTile label="Avg. battery" value={metrics.avgBattery} unit="%" icon={Battery} note={`${metrics.communicationHealth ?? '—'}% comms health`} />
-            <MetricTile label="Throughput" value={metrics.throughput} unit="/ hr" icon={Zap} note={`${metrics.distanceTravelled ?? '—'} m traveled`} tone="metric-teal" />
-          </section>
+          {/* Prominent Task Dispatch Button */}
+          <button
+            type="button"
+            onClick={() => setIsTaskModalOpen(true)}
+            className="px-5 py-2.5 rounded-lg bg-[#3db89a] hover:bg-[#48d2b0] text-slate-950 font-extrabold text-sm flex items-center space-x-2 transition-all shadow-lg hover:shadow-emerald-900/50"
+          >
+            <Plus size={18} strokeWidth={3} />
+            <span>Dispatch Grocery Task</span>
+          </button>
+        </section>
 
-          <div className="control-strip">
-            <div className="control-group">
-              <span className="control-caption"><Command size={13} /> ENVIRONMENT</span>
-              <div className="scenario-select-wrap">
-                <select value={scenario} onChange={(e) => chooseScenario(e.target.value)} aria-label="Choose simulation scenario" data-testid="select-scenario">
-                  {scenarios.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
-                </select><ChevronDown size={13} />
+        {/* Top 4 High-Level Metric Tiles */}
+        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <MetricTile
+            label="Active AMRs"
+            value={activeCount}
+            unit={`/ ${robots.length}`}
+            icon={Bot}
+            note={`${((activeCount / (robots.length || 1)) * 100).toFixed(0)}% fleet operational`}
+          />
+          <MetricTile
+            label="Completed Orders"
+            value={metrics.completedTasks ?? 0}
+            unit="items"
+            icon={Target}
+            note={`${activeTasks.length} active in queue`}
+          />
+          <MetricTile
+            label="P2P Negotiations"
+            value={metrics.conflicts ?? conflicts.length}
+            unit="resolved"
+            icon={Route}
+            note={`${metrics.deadlocks ?? 0} deadlock recoveries`}
+          />
+          <MetricTile
+            label="Avg. Battery & Link"
+            value={Number(metrics.avgBattery ?? 85).toFixed(0)}
+            unit="%"
+            icon={Battery}
+            note="WebSocket 10 Hz live sync"
+          />
+        </section>
+
+        {/* Main 2-Column Grid: 3D Digital Twin Canvas + Interactive Fleet Roster */}
+        <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left Column (2 Spans): 3D Digital Twin Canvas */}
+          <div className="lg:col-span-2 bg-[#17221f] border border-[#283834] rounded-xl p-4 flex flex-col shadow-xl space-y-3">
+            <div className="flex items-center justify-between border-b border-[#283834] pb-3">
+              <div>
+                <span className="text-[10px] font-mono text-[#3db89a] uppercase tracking-wider">3D Digital Twin · Floor Zone 05</span>
+                <h2 className="text-lg font-bold text-white leading-tight">Warehouse Floor Observability</h2>
               </div>
-              <button type="button" className="control-icon-button" title="Inject selected environmental disturbance" onClick={() => inject(disturbance)} data-testid="button-inject-disturbance"><Siren size={14} /><span>Inject</span></button>
-              <select className="disturbance-select" value={disturbance} onChange={(e) => setDisturbance(e.target.value)} aria-label="Disturbance type" data-testid="select-disturbance">
-                {disturbances.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
-              </select>
-            </div>
-            <div className="control-right">
-              <div className="speed-control"><span>SPEED</span>{[1, 2, 4].map((speed) => <button type="button" key={speed} className={Number(data?.speed ?? 1) === speed ? 'speed-active' : ''}
-                onClick={() => setSpeed(speed)} data-testid={`button-speed-${speed}`}>{speed}×</button>)}</div>
-              <span className="control-v-divider" />
-              <button type="button" className="control-icon-button create-task-button" onClick={() => setIsTaskModalOpen(true)} data-testid="button-create-task"><Plus size={14} /> Add task</button>
-            </div>
-          </div>
 
-          <div className="primary-grid">
-            <section className="panel map-panel">
-              <div className="panel-heading">
-                <div><div className="panel-kicker"><span className="panel-kicker-mark" /> SPATIAL VIEW</div><h2>Warehouse floor <span>·</span> Zone 05</h2></div>
-                <div className="map-heading-tools">
-                  <div className="map-view-switch" aria-label="Warehouse view mode">
-                    <button type="button" className={mapMode === '3d' ? 'view-active' : ''} onClick={() => setMapMode('3d')}>3D</button>
-                    <button type="button" className={mapMode === 'plan' ? 'view-active' : ''} onClick={() => setMapMode('plan')}>PLAN</button>
-                  </div>
-                  {mapMode === '3d' && <>
-                    <button type="button" className={`scene-control ${topView ? 'scene-control-active' : ''}`} onClick={() => { setTopView(!topView); setFollowRobot(false); }} title="Toggle top-down camera">{topView ? 'ORBIT' : 'TOP'}</button>
-                    <button type="button" className={`scene-control ${followRobot ? 'scene-control-active' : ''}`} onClick={() => { setFollowRobot(!followRobot); setTopView(false); }} title="Follow the selected agent">FOLLOW</button>
-                    <button type="button" className="scene-control scene-reset" onClick={() => { setFollowRobot(false); setTopView(false); setCameraReset((value) => value + 1); }} title="Reset camera"><RotateCcw size={11} /></button>
-                  </>}
-                  <span className="map-live-pill"><i /> LIVE</span>
+              {/* View Control Toolbar */}
+              <div className="flex items-center space-x-2 text-xs font-medium">
+                <div className="bg-[#111816] rounded-lg p-1 border border-[#283834]">
+                  <button
+                    onClick={() => setMapMode('3d')}
+                    className={`px-3 py-1 rounded font-semibold transition-all ${mapMode === '3d' ? 'bg-[#2e8b75] text-white' : 'text-[#8aa39b]'}`}
+                  >
+                    3D
+                  </button>
+                  <button
+                    onClick={() => setMapMode('plan')}
+                    className={`px-3 py-1 rounded font-semibold transition-all ${mapMode === 'plan' ? 'bg-[#2e8b75] text-white' : 'text-[#8aa39b]'}`}
+                  >
+                    PLAN
+                  </button>
                 </div>
-              </div>
-              <div className="map-summary">
-                 <div><span className="summary-square" /> <b>{robots.length}</b> agents on floor</div>
-                <div><span className="summary-square conflict" /> <b>{conflicts.length}</b> open negotiations</div>
-                <div><span className="summary-square blocked" /> <b>{data?.blockedEdges?.length ?? 0}</b> restricted segments</div>
-                <span className="map-scale">GRID 1.0 M <span>·</span> NORTH ↑</span>
-              </div>
-               {mapMode === '3d' ? (
-                 <WarehouseScene3D
-                   robots={rawRobots}
-                   nodes={data?.nodes ?? []}
-                   edges={data?.edges ?? []}
-                   obstacles={data?.obstacles ?? []}
-                   reservations={data?.reservations ?? []}
-                   selectedId={data?.selectedRobotId ?? null}
-                   onSelect={(id) => selectRobot(id)}
-                   follow={followRobot}
-                   topView={topView}
-                   resetToken={cameraReset}
-                 />
-               ) : (
-                 <FleetMap robots={robots} nodes={data?.nodes ?? []} blockedEdges={(data?.edges ?? []).filter((edge: Datum) => edge.blocked)} obstacles={data?.obstacles ?? []}
-                   reservations={data?.reservations ?? []} selectedId={data?.selectedRobotId ?? null}
-                   onSelect={(id) => selectRobot(id)} />
-               )}
-              <div className="map-footer"><span><Radio size={13} /> COORDINATION LAYER <b>ONLINE</b></span><span>ROUTE RESERVATIONS VISUALIZED</span></div>
-            </section>
 
-            <aside className="right-rail">
-              <section className="panel inspector-panel">
-                <div className="panel-heading compact">
-                  <div><div className="panel-kicker">AGENT INSPECTOR</div><h2>{selectedRobot ? str(selectedRobot.id) : 'No agent selected'}</h2></div>
-                  {selectedRobot && <span className={`status-chip ${statusTone(selectedRobot.state)}`}><i />{str(selectedRobot.state, 'UNKNOWN')}</span>}
-                </div>
-                {selectedRobot ? <RobotInspector robot={selectedRobot} /> : (
-                  <div className="inspector-empty"><div className="empty-radar"><Bot size={21} /></div><strong>Awaiting selection</strong><span>Select an agent on the map or roster to inspect its current intent and health.</span></div>
+                {mapMode === '3d' && (
+                  <>
+                    <button
+                      onClick={() => { setTopView(!topView); setFollowRobot(false); }}
+                      className={`px-3 py-1.5 rounded-lg border font-mono transition-all ${topView ? 'bg-[#2e8b75] border-[#3db89a] text-white' : 'bg-[#111816] border-[#283834] text-[#8aa39b] hover:text-white'}`}
+                    >
+                      {topView ? 'ORBIT' : 'TOP'}
+                    </button>
+                    <button
+                      onClick={() => { setFollowRobot(!followRobot); setTopView(false); }}
+                      className={`px-3 py-1.5 rounded-lg border font-mono transition-all ${followRobot ? 'bg-[#2e8b75] border-[#3db89a] text-white' : 'bg-[#111816] border-[#283834] text-[#8aa39b] hover:text-white'}`}
+                    >
+                      FOLLOW
+                    </button>
+                    <button
+                      onClick={() => { setFollowRobot(false); setTopView(false); setCameraReset((v) => v + 1); }}
+                      className="p-1.5 rounded-lg bg-[#111816] border border-[#283834] text-[#8aa39b] hover:text-white transition-colors"
+                      title="Reset Camera"
+                    >
+                      <RotateCcw size={14} />
+                    </button>
+                  </>
                 )}
-                {data?.latestDecision && <div className="decision-callout"><div><ShieldCheck size={14} /> LATEST COORDINATION DECISION</div><p>{str(data.latestDecision.reason ?? data.latestDecision.decision ?? data.latestDecision)}</p><span>{str(data.latestDecision.resource, 'SHARED RESOURCE')} · {str(data.latestDecision.status, 'RESOLVED')}</span></div>}
-              </section>
-              <section className="panel conflict-panel">
-                <div className="section-title-row"><div><div className="panel-kicker">SHARED-SPACE PROTOCOL</div><h2>Negotiations</h2></div><span className="count-chip">{conflicts.length}</span></div>
-                {conflicts.length > 0 ? <div className="negotiation-list scrollbar-thin">
-                  {conflicts.slice(0, 4).map((conflict, index) => <div className="negotiation" key={str(conflict.id, `conflict-${index}`)} data-testid={`conflict-${str(conflict.id, String(index))}`}>
-                    <div className="negotiation-top"><span className="conflict-resource"><Route size={12} />{str(conflict.resource, 'SHARED AISLE')}</span><span className={`status-chip ${statusTone(conflict.risk)}`}>{str(conflict.risk, 'REVIEW')}</span></div>
-                    <div className="negotiation-pair"><b>{str(conflict.robotA)}</b><span>×</span><b>{str(conflict.robotB)}</b><time>{str(conflict.etaA)} / {str(conflict.etaB)}</time></div>
-                    <p>{str(conflict.decision, str(conflict.status, 'Negotiation in progress'))}</p>
-                  </div>)}
-                </div> : <div className="quiet-empty"><ShieldCheck size={15} /><span>No shared-space conflicts. Agents are moving with clear reservations.</span></div>}
-              </section>
-            </aside>
+              </div>
+            </div>
+
+            {/* 3D Canvas / 2D Plan View Render */}
+            {mapMode === '3d' ? (
+              <div className="w-full h-[460px] rounded-xl overflow-hidden border border-[#283834] relative bg-[#111816]">
+                <WarehouseScene3D
+                  robots={rawRobots}
+                  nodes={data?.nodes ?? []}
+                  edges={data?.edges ?? []}
+                  obstacles={data?.obstacles ?? []}
+                  reservations={data?.reservations ?? []}
+                  selectedId={data?.selectedRobotId ?? null}
+                  onSelect={(id) => selectRobot(id)}
+                  follow={followRobot}
+                  topView={topView}
+                  resetToken={cameraReset}
+                />
+              </div>
+            ) : (
+              <PlanView2D
+                robots={robots}
+                nodes={data?.nodes ?? []}
+                selectedId={data?.selectedRobotId ?? null}
+                onSelect={(id) => selectRobot(id)}
+              />
+            )}
+
+            <div className="flex items-center justify-between text-xs text-[#8aa39b] font-mono pt-1">
+              <span className="flex items-center gap-1.5"><Radio size={13} className="text-[#3db89a]" /> P2P RADIO MESH ONLINE</span>
+              <span>GRID SPACING: 1.0 METER</span>
+            </div>
           </div>
 
-          <div className="secondary-grid">
-            <section className="panel roster-panel" id="section-fleet">
-              <div className="section-title-row">
-                <div><div className="panel-kicker">INDEPENDENT AGENTS</div><h2>Fleet roster <span className="subtle-count">{robots.length} units</span></h2></div>
-                <label className="search-box"><SlidersHorizontal size={13} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter by ID" aria-label="Filter robots by ID" data-testid="input-filter-robots" /><span className="mono">/</span></label>
+          {/* Right Column (1 Span): Interactive 6-AMR Fleet Roster Cards */}
+          <div className="bg-[#17221f] border border-[#283834] rounded-xl p-4 flex flex-col shadow-xl space-y-3">
+            <div className="flex items-center justify-between border-b border-[#283834] pb-3">
+              <div>
+                <span className="text-[10px] font-mono text-[#3db89a] uppercase tracking-wider">Independent Agents</span>
+                <h2 className="text-lg font-bold text-white leading-tight">Fleet Roster ({robots.length} Units)</h2>
               </div>
-              <div className="table-wrap">
-                <table className="data-table">
-                  <thead><tr><th>AGENT</th><th>STATE / INTENT</th><th>TASK</th><th>BATTERY</th><th>ETA</th><th>LINK</th></tr></thead>
-                  <tbody>
-                    {filteredRobots.length ? filteredRobots.slice(0, 8).map((robot, index) => {
-                      const selected = str(robot.id) === data?.selectedRobotId;
-                      const battery = Number(robot.battery);
-                      return <tr key={str(robot.id, `robot-${index}`)} className={selected ? 'row-selected' : ''} onClick={() => selectRobot(str(robot.id))}
-                        data-testid={`row-robot-${str(robot.id, String(index))}`} tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') selectRobot(str(robot.id)); }}>
-                        <td><span className="robot-cell-mark">N</span><b>{str(robot.id)}</b></td>
-                        <td><span className={`state-dot ${statusTone(robot.state)}`} /><span className="table-state">{str(robot.state, 'Unknown')}</span><small>{str(robot.intent, '—')}</small></td>
-                        <td><span className="mono task-id">{str(robot.taskId, '—')}</span></td>
-                        <td><div className="battery-cell"><span className={`battery-bar ${battery < 25 ? 'battery-low' : ''}`}><i style={{ width: `${Math.min(100, Math.max(0, battery))}%` }} /></span><span>{Number.isFinite(battery) ? `${battery}%` : '—'}</span></div></td>
-                        <td className="mono">{str(robot.eta, '—')}</td>
-                        <td><LinkQuality value={robot.communication} /></td>
-                      </tr>;
-                    }) : <tr><td colSpan={6}><div className="table-empty"><Bot size={18} /><strong>{robots.length ? 'No matching agents' : 'Fleet is standing by'}</strong><span>{robots.length ? 'Try a different robot identifier.' : 'Agents will appear here when the simulation is initialized.'}</span></div></td></tr>}
-                  </tbody>
-                </table>
-              </div>
-              <div className="panel-footnote"><span><i className="footnote-pulse" /> TELEMETRY STREAMING</span><span>SELECT A ROW TO INSPECT</span></div>
-            </section>
+            </div>
 
-            <section className="panel event-panel" id="section-events">
-              <div className="section-title-row"><div><div className="panel-kicker">SYSTEM JOURNAL</div><h2>Recent events</h2></div><span className="event-stream-label"><span className="pulse-dot" /> STREAM</span></div>
-              {events.length ? <div className="event-list scrollbar-thin max-h-96 overflow-y-auto">
-                {events.slice(0, 15).map((event, index) => <EventLine event={event} key={str(event.id, `event-${index}`)} index={index} />)}
-              </div> : <div className="quiet-empty event-empty"><Clock3 size={16} /><span>Waiting for simulation events. Coordination decisions and state changes appear here.</span></div>}
-              <div className="panel-footnote"><span>EVENT BUS <b>CONNECTED</b></span><span>{events.length} RECORDS</span></div>
-            </section>
+            <div className="space-y-2.5 max-h-[460px] overflow-y-auto pr-1">
+              {robots.map((robot) => {
+                const isSelected = str(robot.id) === data?.selectedRobotId;
+                const battery = Number(robot.battery ?? 80);
+                const statusStr = str(robot.state, 'IDLE').toUpperCase();
+
+                return (
+                  <button
+                    key={str(robot.id)}
+                    type="button"
+                    onClick={() => selectRobot(str(robot.id))}
+                    className={`w-full text-left p-3 rounded-lg border transition-all flex flex-col space-y-2 ${
+                      isSelected
+                        ? 'border-[#3db89a] bg-[#1f332c] shadow-md ring-1 ring-[#3db89a]'
+                        : 'border-[#283834] bg-[#111816]/70 hover:border-[#385249]'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <div className="w-6 h-6 rounded bg-[#2e8b75] flex items-center justify-center font-bold text-white text-xs">
+                          {str(robot.id).replace('AMR-', '')}
+                        </div>
+                        <span className="font-bold text-sm text-white font-mono">{str(robot.id)}</span>
+                      </div>
+                      <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${statusTone(statusStr)}`}>
+                        {statusStr}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs text-[#8aa39b] font-mono">
+                      <span>Task: <strong className="text-white">{str(robot.taskId, 'NONE')}</strong></span>
+                      <span>Pos: <strong className="text-[#3db89a]">{str(robot.currentNode)}</strong></span>
+                    </div>
+
+                    {/* Battery Indicator Bar */}
+                    <div className="w-full bg-[#111816] h-1.5 rounded-full overflow-hidden border border-[#283834]">
+                      <div
+                        className={`h-full transition-all ${battery < 25 ? 'bg-rose-500' : 'bg-[#3db89a]'}`}
+                        style={{ width: `${Math.min(100, Math.max(0, battery))}%` }}
+                      />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Selected Robot Quick Inspector */}
+            {selectedRobot && (
+              <div className="bg-[#1f2c28] border border-[#2e4d43] rounded-lg p-3 text-xs space-y-1.5 pt-2">
+                <div className="flex items-center justify-between font-bold text-white font-mono border-b border-[#2e4d43] pb-1">
+                  <span className="flex items-center gap-1.5"><Bot size={14} className="text-[#3db89a]" /> Selected: {str(selectedRobot.id)}</span>
+                  <span className="text-[#3db89a]">{str(selectedRobot.state)}</span>
+                </div>
+                <div className="text-[#8aa39b] font-mono leading-tight">
+                  <div>Intent: <strong className="text-white">{str(selectedRobot.intent, 'AVAILABLE')}</strong></div>
+                  <div>Dest: <strong className="text-white">{str(selectedRobot.destination, '—')}</strong></div>
+                  <div>Status Note: <span className="text-[#9cb5ac]">{str(selectedRobot.reason, 'Nominal navigation')}</span></div>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Bottom Section: Active Task Queue Table + Live System Journal */}
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Active Task Queue */}
+          <div className="bg-[#17221f] border border-[#283834] rounded-xl p-4 space-y-3 shadow-xl">
+            <div className="flex items-center justify-between border-b border-[#283834] pb-3">
+              <div>
+                <span className="text-[10px] font-mono text-[#3db89a] uppercase tracking-wider">Order Flow</span>
+                <h2 className="text-lg font-bold text-white leading-tight">Active Task Queue</h2>
+              </div>
+              <span className="text-xs font-mono font-bold bg-[#1f302b] border border-[#2e8b75]/40 text-[#42d4b0] px-2.5 py-1 rounded-full">
+                {activeTasks.length} Active
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-[#283834] text-[#8aa39b] font-mono uppercase">
+                    <th className="py-2 px-2">Order / SKU</th>
+                    <th className="py-2 px-2">Route</th>
+                    <th className="py-2 px-2">AMR</th>
+                    <th className="py-2 px-2">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#283834]">
+                  {activeTasks.length ? (
+                    activeTasks.slice(0, 6).map((task) => (
+                      <tr key={str(task.id)} className="hover:bg-[#1f2c28] transition-colors">
+                        <td className="py-2.5 px-2 font-mono">
+                          <div className="font-bold text-white">{str(task.id)}</div>
+                          <div className="text-[10px] text-[#8aa39b]">{str(task.sku)}</div>
+                        </td>
+                        <td className="py-2.5 px-2 font-mono text-[#3db89a]">
+                          {str(task.pickup)} → {str(task.destination)}
+                        </td>
+                        <td className="py-2.5 px-2 font-mono font-bold text-amber-400">
+                          {str(task.assignedRobotId, 'UNASSIGNED')}
+                        </td>
+                        <td className="py-2.5 px-2">
+                          <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${statusTone(task.status)}`}>
+                            {str(task.status)}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={4} className="py-8 text-center text-[#8aa39b] font-mono">
+                        No active tasks. Click &quot;Dispatch Grocery Task&quot; above to assign work to the fleet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          <div className="bottom-grid">
-            <section className="panel task-panel" id="section-tasks">
-              <div className="section-title-row"><div><div className="panel-kicker">ORDER FLOW</div><h2>Active task queue</h2></div><span className="count-chip">{metrics.activeTasks ?? activeTasks.length} ACTIVE</span></div>
-              <div className="task-table-wrap">
-                <table className="data-table task-table">
-                  <thead><tr><th>ORDER / SKU</th><th>ROUTE</th><th>PRIORITY</th><th>ASSIGNED AGENT</th><th>STATUS</th><th>ETA</th></tr></thead>
-                  <tbody>{activeTasks.slice(0, 5).length ? activeTasks.slice(0, 5).map((task, index) => <tr key={str(task.id, `task-${index}`)} data-testid={`row-task-${str(task.id, String(index))}`}>
-                    <td><b>{str(task.orderId, str(task.id))}</b><small>{str(task.sku, 'SKU pending')}</small></td>
-                    <td><span className="route-readout">{str(task.pickup, '—')} <ArrowDownRight size={12} /> {str(task.destination, '—')}</span></td>
-                    <td><span className={`priority-label priority-${priorityLabel(task.priority).toLowerCase()}`}>{priorityLabel(task.priority)}</span></td>
-                    <td className="mono">{str(task.assignedRobotId, 'UNASSIGNED')}</td>
-                    <td><span className={`status-chip ${statusTone(task.status)}`}>{str(task.status, 'QUEUED')}</span></td>
-                    <td className="mono">{str(task.eta, '—')}</td>
-                  </tr>) : <tr><td colSpan={6}><div className="table-empty task-empty"><Boxes size={18} /><strong>No work in queue</strong><span>Add an environment task to observe the fleet's autonomous assignment.</span></div></td></tr>}</tbody>
-                </table>
+          {/* Live System Journal Stream */}
+          <div className="bg-[#17221f] border border-[#283834] rounded-xl p-4 space-y-3 shadow-xl flex flex-col">
+            <div className="flex items-center justify-between border-b border-[#283834] pb-3">
+              <div>
+                <span className="text-[10px] font-mono text-[#3db89a] uppercase tracking-wider">System Journal</span>
+                <h2 className="text-lg font-bold text-white leading-tight">Live Event Stream</h2>
               </div>
-               <div className="task-note"><span><Target size={13} /> Task allocation is autonomous</span><span>NO ROBOT-LEVEL COMMANDS</span></div>
-            </section>
+              <span className="flex items-center gap-1.5 text-xs font-mono text-emerald-400">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                STREAM
+              </span>
+            </div>
 
-            <section className="panel lab-panel" id="section-benchmark">
-              <div className="panel-kicker">EVALUATION SUITE</div><h2>Simulation lab</h2>
-              <p>Probe coordination resilience under repeatable warehouse conditions.</p>
-              <div className="lab-actions">
-                 <button type="button" onClick={() => runBenchmark()} data-testid="button-run-benchmark"><Gauge size={15} /><span><b>Run benchmark</b><small>{currentBenchmark ? `Seed ${currentBenchmark.seed} · measured` : 'Measure fleet performance'}</small></span><ArrowUpRight size={14} /></button>
-                <button type="button" onClick={() => runStressTest()} data-testid="button-run-stress"><Activity size={15} /><span><b>Stress test</b><small>Escalating environment load</small></span><ArrowUpRight size={14} /></button>
-                <button type="button" onClick={() => runDemo()} data-testid="button-run-demo"><Sparkles size={15} /><span><b>Guided demo</b><small>Showcase recovery sequence</small></span><ArrowUpRight size={14} /></button>
-              </div>
-              {currentBenchmark && <div className="benchmark-result" data-testid="benchmark-result">
-                <div><TimerReset size={14} /> SEEDED COMPARISON · {str(currentBenchmark.seed)}</div>
-                <strong>{Number(currentBenchmark.timeReduction).toFixed(1)}% less completion time</strong>
-                <span>Stop-and-wait {Number(currentBenchmark.baseline?.completionTime).toFixed(1)}s ({currentBenchmark.baseline?.tasksCompleted}/12 tasks) · Distributed {Number(currentBenchmark.nexus?.completionTime).toFixed(1)}s ({currentBenchmark.nexus?.tasksCompleted}/12)</span>
-              </div>}
-              <div className="lab-meta"><span><ShieldCheck size={13} /> ENVIRONMENT-SCOPED ONLY</span><span>SIH 2026</span></div>
-            </section>
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+              {events.length ? (
+                events.slice(0, 10).map((event, idx) => {
+                  const typeStr = str(event.type, 'EVENT').replace(/_/g, ' ');
+                  const isBad = /failure|blocked|deadlock|conflict/i.test(typeStr);
+                  const isGood = /complete|resolve|recover|assign|picked/i.test(typeStr);
+
+                  return (
+                    <div key={str(event.id, String(idx))} className="p-2.5 rounded-lg bg-[#111816]/80 border border-[#283834] text-xs space-y-1">
+                      <div className="flex items-center justify-between font-mono">
+                        <span className={`font-bold ${isBad ? 'text-rose-400' : isGood ? 'text-emerald-400' : 'text-cyan-400'}`}>
+                          {typeStr.toUpperCase()}
+                        </span>
+                        <span className="text-[#8aa39b]">{str(event.robotId, 'FLEET')} · {shortTime(event.time)}</span>
+                      </div>
+                      <p className="text-[#9cb5ac] leading-tight">{str(event.reason, str(event.result))}</p>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="py-8 text-center text-[#8aa39b] font-mono">
+                  Waiting for simulation events...
+                </div>
+              )}
+            </div>
           </div>
-          <footer className="page-footer"><span>NEXUS-FLEET <b>v0.9.26</b> · BEL WAREHOUSE DIGITAL TWIN</span><span>BUILT FOR AUTONOMOUS COORDINATION <i /></span></footer>
-        </div>
-      </section>
+        </section>
+      </main>
 
       {/* Grocery Task Creation Modal */}
       {isTaskModalOpen && (
@@ -646,52 +641,6 @@ function FleetConsole() {
           </div>
         </div>
       )}
-    </main>
+    </div>
   );
 }
-
-function RobotInspector({ robot }: { robot: Datum }) {
-  const battery = Number(robot.battery);
-  const eta = str(robot.eta, '—');
-  const health = robot.health;
-  const healthLabel = typeof health === 'object' && health ? str(health.status ?? health.state, 'Nominal') : str(health, 'Nominal');
-  return <>
-    <div className="inspector-intent"><div className="intent-stamp"><Target size={15} /></div><div><small>CURRENT INTENT</small><strong>{str(robot.intent, 'Awaiting assignment')}</strong></div></div>
-    <div className="inspector-destination"><span>DESTINATION</span><strong>{str(robot.destination, '—')}</strong><span className="destination-eta"><Clock3 size={12} /> ETA {eta}</span></div>
-    <div className="battery-meter">
-      <div className="meter-header"><span><Battery size={13} /> BATTERY RESERVE</span><strong>{Number.isFinite(battery) ? `${battery}%` : '—'}</strong></div>
-      <div className="meter-track"><i style={{ width: `${Math.min(100, Math.max(0, battery || 0))}%` }} className={battery < 25 ? 'low' : ''} /></div>
-      <div className="meter-scale"><span>RETURN THRESHOLD 20%</span><span>100%</span></div>
-    </div>
-    <div className="inspector-specs">
-      <div><span>ASSIGNED TASK</span><b className="mono">{str(robot.taskId, 'NONE')}</b></div>
-      <div><span>COMMUNICATION</span><b><LinkQuality value={robot.communication} compact /></b></div>
-      <div><span>HEALTH</span><b className={`health-state ${statusTone(healthLabel)}`}><i />{healthLabel}</b></div>
-      <div><span>RECOVERY NOTE</span><b>{str(robot.reason, 'No active recovery')}</b></div>
-    </div>
-  </>;
-}
-
-function LinkQuality({ value, compact = false }: { value: unknown; compact?: boolean }) {
-  const label = typeof value === 'object' && value ? str((value as Datum).status ?? (value as Datum).quality, 'ONLINE') : str(value, 'ONLINE');
-  const numeric = typeof value === 'number' ? value : Number((value as Datum)?.quality ?? (value as Datum)?.strength);
-  const tone = statusTone(label);
-  const bars = Number.isFinite(numeric) ? Math.max(1, Math.min(4, Math.ceil(numeric / 25))) : /loss|weak|offline|poor/.test(label.toLowerCase()) ? 1 : 4;
-  return <span className={`link-quality ${tone} ${compact ? 'compact-link' : ''}`} title={`Communication: ${label}`}><Signal size={12} /><i className="signal-bars">{[1, 2, 3, 4].map((bar) => <b key={bar} className={bar <= bars ? 'filled' : ''} />)}</i>{!compact && <small>{label}</small>}</span>;
-}
-
-function EventLine({ event, index }: { event: Datum; index: number }) {
-  const type = str(event.type, 'STATE UPDATE');
-  const bad = /failure|blocked|deadlock|conflict|loss|obstacle/i.test(type + str(event.reason, ''));
-  const good = /complete|resolve|recover|assign/i.test(type + str(event.result, ''));
-  return <div className="event-line" data-testid={`event-${str(event.id, String(index))}`}>
-    <div className={`event-marker ${bad ? 'bad' : good ? 'good' : ''}`}>{bad ? <AlertOctagon size={12} /> : good ? <ShieldCheck size={12} /> : <Activity size={12} />}</div>
-    <div className="event-copy"><div><b>{type.replaceAll('-', ' ').toUpperCase()}</b><span>{str(event.robotId, 'FLEET')}</span></div>
-      <p>{str(event.reason, str(event.result, str(event.resource, 'Coordination state updated')))}</p>
-      {event.resource && <span className="event-resource">{str(event.resource)}</span>}
-    </div>
-    <time className="mono">{shortTime(event.time)}</time>
-  </div>;
-}
-
-export { FleetConsole };
