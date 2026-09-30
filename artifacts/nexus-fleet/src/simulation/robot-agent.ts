@@ -917,7 +917,7 @@ export class RobotAgent {
       (robot) => Math.hypot(robot.x - this.state.x, robot.y - this.state.y) < 1.1,
     );
     const edgeAtCapacity = edgeOccupants.length >= edge.capacity;
-    if (opposingTraffic || unsafeFollowingDistance || edgeAtCapacity) {
+    if (unsafeFollowingDistance || edgeAtCapacity) {
       this.state.status = "WAITING";
       this.state.intent = "EDGE_CLEARANCE";
       this.state.reason = `Waiting for ${edge.id} to clear before entering the shared lane.`;
@@ -965,9 +965,18 @@ export class RobotAgent {
     this.state.edgeProgress = Math.min(1, this.state.edgeProgress + dt / secondsForEdge);
     this.state.velocity = speed;
     this.state.acceleration = (this.state.edgeProgress - previousProgress) / Math.max(dt, 0.01);
-    this.state.heading = Math.atan2(destination.y - source.y, destination.x - source.x);
-    this.state.x = source.x + (destination.x - source.x) * this.state.edgeProgress;
-    this.state.y = source.y + (destination.y - source.y) * this.state.edgeProgress;
+    const heading = Math.atan2(destination.y - source.y, destination.x - source.x);
+    this.state.heading = heading;
+
+    // Dual-Lane Sideways Overtake Protocol: Right-hand lateral shift for head-on passing
+    const rx = Math.sin(heading);
+    const ry = -Math.cos(heading);
+    const laneOffset = opposingTraffic || this.state.intent === "PICK" || this.state.intent === "OVERTAKE" ? 0.65 : 0.45;
+    const xCenter = source.x + (destination.x - source.x) * this.state.edgeProgress;
+    const yCenter = source.y + (destination.y - source.y) * this.state.edgeProgress;
+
+    this.state.x = xCenter + rx * laneOffset;
+    this.state.y = yCenter + ry * laneOffset;
     this.state.distanceTravelled += edge.length * (this.state.edgeProgress - previousProgress);
     this.state.status =
       this.state.status === "NEGOTIATING" || this.state.status === "REROUTING"

@@ -713,10 +713,10 @@ class RobotAgent:
             for r in context.robots if r.id == rid
         ]
         opposing = any(r.fromNode == next_node and r.currentWaypoint == self.state.currentNode for r in edge_occupants)
-        unsafe_dist = any(math.hypot(r.x - self.state.x, r.y - self.state.y) < 1.1 for r in edge_occupants)
+        unsafe_dist = any(math.hypot(r.x - self.state.x, r.y - self.state.y) < 0.65 for r in edge_occupants)
         capacity_full = len(edge_occupants) >= edge.capacity
 
-        if opposing or unsafe_dist or capacity_full:
+        if unsafe_dist or capacity_full:
             self.state.status = "WAITING"
             self.state.intent = "EDGE_CLEARANCE"
             self.state.reason = f"Waiting for {edge.id} to clear."
@@ -756,9 +756,17 @@ class RobotAgent:
         self.state.edgeProgress = min(1.0, self.state.edgeProgress + dt / seconds_for_edge)
         self.state.velocity = speed
         self.state.acceleration = (self.state.edgeProgress - prev_progress) / max(dt, 0.01)
-        self.state.heading = math.atan2(destination.y - source.y, destination.x - source.x)
-        self.state.x = source.x + (destination.x - source.x) * self.state.edgeProgress
-        self.state.y = source.y + (destination.y - source.y) * self.state.edgeProgress
+        heading = math.atan2(destination.y - source.y, destination.x - source.x)
+        self.state.heading = heading
+        
+        # Dual-Lane Sideways Overtake Protocol: Right-hand lateral shift for head-on passing
+        rx, ry = math.sin(heading), -math.cos(heading)
+        lane_offset = 0.65 if (opposing or self.state.intent in ("PICK", "OVERTAKE")) else 0.45
+        x_center = source.x + (destination.x - source.x) * self.state.edgeProgress
+        y_center = source.y + (destination.y - source.y) * self.state.edgeProgress
+        
+        self.state.x = x_center + rx * lane_offset
+        self.state.y = y_center + ry * lane_offset
         self.state.distanceTravelled += edge.length * (self.state.edgeProgress - prev_progress)
 
         if self.state.status in ("NEGOTIATING", "REROUTING"):
