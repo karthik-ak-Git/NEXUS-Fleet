@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  nexus-fleet-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nexus-fleet-backend-service
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - HOST=0.0.0.0
+      - ENVIRONMENT=production
+      - LOG_LEVEL=info
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
