@@ -501,19 +501,29 @@ class RobotAgent:
         task = next((t for t in context.tasks if t.id == self.state.currentTaskId), None)
         if not task:
             return
-        if not task.picked and self.state.currentNode == task.pickup:
+        pickup_node = node_by_id(context.nodes, task.pickup)
+        dest_node = node_by_id(context.nodes, task.destination)
+
+        dist_to_pickup = math.hypot(self.state.x - pickup_node.x, self.state.y - pickup_node.y) if pickup_node else 99.0
+        dist_to_dest = math.hypot(self.state.x - dest_node.x, self.state.y - dest_node.y) if dest_node else 99.0
+
+        # 1. ITEM PICKUP PHASE:
+        if not task.picked and (self.state.currentNode == task.pickup or dist_to_pickup < 0.8):
             task.picked = True
             task.status = "DELIVERING"
             self.state.intent = "DELIVER"
             self.state.destination = task.destination
+            this_goal = task.destination
             self.route_goal = None
-            self.state.reason = f"Picked {task.sku}; local planner routing to {task.destination}."
+            self.state.reason = f"Picked {task.sku} from {task.pickup}; routing to Pack Counter {task.destination}."
             context.emit(self.state.id, "ITEM_PICKED", self.state.reason, task.pickup, task.sku)
             self.record_decision(context.now, "PICKUP", self.state.reason)
-        elif task.picked and self.state.currentNode == task.destination:
+            self._ensure_route(this_goal, context)
+        # 2. COUNTER DELIVERY & PACKAGE ACCEPTANCE HANDSHAKE PHASE:
+        elif task.picked and (self.state.currentNode == task.destination or dist_to_dest < 0.85):
             if task.status == "COMPLETED":
                 return
-            # Counter Package Acceptance & Handshake: ROBOT -> COUNTER
+            # Pack Counter Package Acceptance Handshake: ROBOT -> COUNTER
             task.picked = False
             task.status = "COMPLETED"
             task.eta = context.now
@@ -523,8 +533,9 @@ class RobotAgent:
             self.state.destination = None
             self.route_goal = None
             self.state.status = "DELIVERY_COMPLETED"
-            self.state.reason = f"Counter {task.destination} accepted {task.sku}; delivery complete."
+            self.state.reason = f"Pack Counter {task.destination} accepted {task.sku}; delivery complete."
 
+            context.emit(self.state.id, "COUNTER_PACKAGE_ACCEPTED", f"Pack Counter {task.destination} accepted package {task.sku} from {self.state.id}.", task.destination, task.id)
             context.emit(self.state.id, "TASK_COMPLETED", self.state.reason, task.destination, task.id)
             self.record_decision(context.now, "TASK_COMPLETE", self.state.reason)
             context.on_task_completed(task.id, self.state.id)
@@ -604,9 +615,13 @@ class RobotAgent:
             "AMR-01": "N-0-0",
             "AMR-02": "N-0-1",
             "AMR-03": "N-0-2",
-            "AMR-04": "N-5-6",
-            "AMR-05": "N-5-7",
-            "AMR-06": "N-5-8",
+            "AMR-04": "N-0-3",
+            "AMR-05": "N-0-4",
+            "AMR-06": "N-5-4",
+            "AMR-07": "N-5-5",
+            "AMR-08": "N-5-6",
+            "AMR-09": "N-5-7",
+            "AMR-10": "N-5-8",
         }
         return home_map.get(self.state.id, "N-0-0")
 

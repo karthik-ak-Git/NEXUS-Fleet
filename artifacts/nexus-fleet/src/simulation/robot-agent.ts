@@ -630,18 +630,28 @@ export class RobotAgent {
   private updateTaskPhase(context: AgentContext) {
     const task = context.tasks.find((item) => item.id === this.state.currentTaskId);
     if (!task) return;
-    if (!task.picked && this.state.currentNode === task.pickup) {
+    const pickupNode = nodeById(context.nodes, task.pickup);
+    const destNode = nodeById(context.nodes, task.destination);
+
+    const distToPickup = pickupNode ? Math.hypot(this.state.x - pickupNode.x, this.state.y - pickupNode.y) : 99;
+    const distToDest = destNode ? Math.hypot(this.state.x - destNode.x, this.state.y - destNode.y) : 99;
+
+    // 1. ITEM PICKUP PHASE:
+    if (!task.picked && (this.state.currentNode === task.pickup || distToPickup < 0.8)) {
       task.picked = true;
       task.status = "DELIVERING";
       this.state.intent = "DELIVER";
       this.state.destination = task.destination;
       this.routeGoal = null;
-      this.state.reason = `Picked ${task.sku}; local planner is routing to ${task.destination}.`;
+      this.state.reason = `Picked ${task.sku} from ${task.pickup}; routing to Pack Counter ${task.destination}.`;
       context.emit(this.state.id, "ITEM_PICKED", this.state.reason, task.pickup, task.sku);
       this.recordDecision(context.now, "PICKUP", this.state.reason);
-    } else if (task.picked && this.state.currentNode === task.destination) {
+      this.ensureRoute(task.destination, context);
+    } 
+    // 2. COUNTER DELIVERY & PACKAGE ACCEPTANCE HANDSHAKE PHASE:
+    else if (task.picked && (this.state.currentNode === task.destination || distToDest < 0.85)) {
       if (task.status === "COMPLETED") return;
-      // Counter Package Acceptance & Handshake: ROBOT -> COUNTER
+      // Pack Counter Package Acceptance Handshake: ROBOT -> COUNTER
       task.picked = false;
       task.status = "COMPLETED";
       task.eta = context.now;
@@ -651,8 +661,9 @@ export class RobotAgent {
       this.state.destination = null;
       this.routeGoal = null;
       this.state.status = "DELIVERY_COMPLETED";
-      this.state.reason = `Counter ${task.destination} accepted ${task.sku}; delivery complete.`;
+      this.state.reason = `Pack Counter ${task.destination} accepted ${task.sku}; delivery complete.`;
 
+      context.emit(this.state.id, "COUNTER_PACKAGE_ACCEPTED", `Pack Counter ${task.destination} accepted package ${task.sku} from ${this.state.id}.`, task.destination, task.id);
       context.emit(this.state.id, "TASK_COMPLETED", this.state.reason, task.destination, task.id);
       this.recordDecision(context.now, "TASK_COMPLETE", this.state.reason);
       context.onTaskCompleted(task.id, this.state.id);
@@ -753,9 +764,13 @@ export class RobotAgent {
       "AMR-01": "N-0-0",
       "AMR-02": "N-0-1",
       "AMR-03": "N-0-2",
-      "AMR-04": "N-5-6",
-      "AMR-05": "N-5-7",
-      "AMR-06": "N-5-8",
+      "AMR-04": "N-0-3",
+      "AMR-05": "N-0-4",
+      "AMR-06": "N-5-4",
+      "AMR-07": "N-5-5",
+      "AMR-08": "N-5-6",
+      "AMR-09": "N-5-7",
+      "AMR-10": "N-5-8",
     };
     return homeMap[this.state.id] ?? "N-0-0";
   }
