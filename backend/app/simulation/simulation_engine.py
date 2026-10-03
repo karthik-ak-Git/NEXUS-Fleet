@@ -22,13 +22,23 @@ ROBOT_IDS = ["AMR-01", "AMR-02", "AMR-03", "AMR-04", "AMR-05", "AMR-06", "AMR-07
 STARTING_NODES = ["N-0-0", "N-0-1", "N-0-2", "N-0-3", "N-0-4", "N-5-4", "N-5-5", "N-5-6", "N-5-7", "N-5-8"]
 PRIORITIES = [0.95, 0.88, 0.82, 0.75, 0.68, 0.62, 0.58, 0.52, 0.45, 0.40]
 
+GROCERY_FOOD_ORDERS = [
+    {"name": "Organic Honeycrisp Apples", "pickup": "N-1-1", "sku": "SKU-A11-ORGANIC_APPLES"},
+    {"name": "Fresh Whole Milk 1L", "pickup": "N-1-2", "sku": "SKU-B12-FRESH_MILK"},
+    {"name": "Artisan Whole Wheat Bread", "pickup": "N-2-1", "sku": "SKU-C13-WHOLE_WHEAT_BREAD"},
+    {"name": "Extra Virgin Olive Oil 500ml", "pickup": "N-2-2", "sku": "SKU-D14-OLIVE_OIL"},
+    {"name": "Dark Roasted Coffee Beans", "pickup": "N-3-1", "sku": "SKU-E15-ROASTED_COFFEE"},
+    {"name": "70% Dark Chocolate Bar", "pickup": "N-3-2", "sku": "SKU-B14-CHOCOLATE_BAR"},
+]
+
 class SimulationEngine:
-    def __init__(self, seed: int = 26123, mode: str = "distributed", robot_count: int = 10, task_count: int = 10):
+    def __init__(self, seed: int = 26123, mode: str = "distributed", robot_count: Optional[int] = None, task_count: Optional[int] = None):
         self.seed = seed
         self.random_state = seed
         self.mode = mode  # "distributed" | "baseline"
-        self.robot_count = min(len(ROBOT_IDS), max(1, robot_count))
-        self.task_count = task_count
+        # Dynamic Swarm Rule: Swarm Size strictly matches Number of Orders!
+        self.task_count = task_count if task_count is not None else len(GROCERY_FOOD_ORDERS)
+        self.robot_count = min(len(ROBOT_IDS), max(1, robot_count if robot_count is not None else self.task_count))
 
         self.nodes, self.edges = create_warehouse()
         self.node_map = {n.id: n for n in self.nodes}
@@ -85,19 +95,18 @@ class SimulationEngine:
             self.agents.append(agent)
 
     def _initialize_tasks(self):
-        racks = get_rack_locations()
         self.tasks = []
-        for i in range(self.task_count):
-            r_info = racks[i % len(racks)]
-            pickup = r_info["id"]
+        count = min(self.task_count, len(GROCERY_FOOD_ORDERS))
+        for i in range(count):
+            order = GROCERY_FOOD_ORDERS[i]
             prio = PRIORITIES[i % len(PRIORITIES)]
             t_id = f"TASK-{self.task_sequence}"
             self.task_sequence += 1
             task = WarehouseTaskSchema(
                 id=t_id,
                 orderId=f"ORD-{78421 + i}",
-                sku=r_info["sku"],
-                pickup=pickup,
+                sku=order["sku"],
+                pickup=order["pickup"],
                 destination=PACKING_NODE,
                 priority=prio,
                 deadline=self.sim_time + 120.0,
@@ -199,20 +208,21 @@ class SimulationEngine:
             resource=resource,
             result=result
         )
-        self.events.append(evt)
+        self.events.insert(0, evt)
         if len(self.events) > 240:
-            self.events = self.events[-240:]
+            self.events = self.events[:240]
 
-    def create_task(self, pickup: Optional[str] = None, destination: Optional[str] = None, priority: float = 0.8) -> WarehouseTaskSchema:
+    def create_task(self, pickup: Optional[str] = None, destination: Optional[str] = None, priority: float = 0.8, sku: Optional[str] = None) -> WarehouseTaskSchema:
         racks = get_rack_locations()
         pick = pickup or random.choice(racks)["id"]
         dest = destination or PACKING_NODE
         t_id = f"TASK-{self.task_sequence}"
         self.task_sequence += 1
+        sku_val = sku or f"SKU-{random.choice(['A','B','C','D'])}{random.randint(11,44)}-FOOD"
         task = WarehouseTaskSchema(
             id=t_id,
             orderId=f"ORD-{78500 + random.randint(1, 999)}",
-            sku=f"SKU-{random.choice(['A','B','C','D'])}{random.randint(11,44)}-URGENT",
+            sku=sku_val,
             pickup=pick,
             destination=dest,
             priority=priority,
@@ -228,8 +238,54 @@ class SimulationEngine:
         self.tasks.append(task)
         self.running = True
         self.last_auction_at = -10.0
-        self.emit_event(None, "TASK_CREATED", f"User dispatched {t_id} at pickup {pick}.", pick, "Auction opened to peer fleet.")
+        self.emit_event(None, "TASK_CREATED", f"Order dispatched: {t_id} ({sku_val}) at pickup {pick}.", pick, "Auction opened to peer fleet.")
         return task
+
+    def dispatch_order_batch(self, products: List[Dict[str, Any]]) -> List[WarehouseTaskSchema]:
+        if not products:
+            return []
+        count = min(len(products), len(ROBOT_IDS))
+        self.robot_count = count
+        self.task_count = count
+        self.tasks = []
+        self.reservations = []
+        self._initialize_agents()
+
+        for i in range(count):
+            prod = products[i]
+            prio = PRIORITIES[i % len(PRIORITIES)]
+            t_id = f"TASK-{self.task_sequence}"
+            self.task_sequence += 1
+            sku_val = prod.get("sku") or f"SKU-{prod.get('id', 'ITEM').upper()}"
+            pick_val = prod.get("pickup") or "N-1-1"
+            task = WarehouseTaskSchema(
+                id=t_id,
+                orderId=f"ORD-{78500 + i + 1}",
+                sku=sku_val,
+                pickup=pick_val,
+                destination=PACKING_NODE,
+                priority=prio,
+                deadline=self.sim_time + 120.0,
+                workload=14.0 + (i % 3) * 4.0,
+                estimatedDistance=35.0,
+                energyEstimate=18.0,
+                status="WAITING",
+                assignedRobotId=None,
+                createdAt=self.sim_time,
+                bids=[]
+            )
+            self.tasks.append(task)
+
+        self.running = True
+        self.last_auction_at = -10.0
+        self.emit_event(
+            None,
+            "SWARM_DISPATCHED",
+            f"Dynamic swarm allocated: {count} active AMRs for {count} food orders.",
+            PACKING_NODE,
+            f"Swarm Size = {count} AMRs"
+        )
+        return self.tasks
 
     def block_aisle(self, edge_id: str = "C-17"):
         self.blocked_edges.add(edge_id)
@@ -383,16 +439,18 @@ class SimulationEngine:
         self.deadlock_cycles = cycles
         for cycle in cycles:
             cycle_key = "->".join(cycle)
-            if cycle_key not in self.seen_deadlock_cycles:
+            cycle_agents = [a for a in self.agents if a.state.id in cycle]
+            max_wait = max((a.state.waitSeconds for a in cycle_agents), default=0.0)
+            if cycle_key not in self.seen_deadlock_cycles or max_wait >= 1.2:
                 self.seen_deadlock_cycles.add(cycle_key)
                 self.total_deadlocks += 1
                 self.emit_event(cycle[0], "DEADLOCK_DETECTED", f"Wait-for cycle detected: {cycle_key}", None, "Cycle breaking resolution engaged.")
                 
                 # Victim selection: lowest task priority
-                cycle_agents = [a for a in self.agents if a.state.id in cycle]
-                cycle_agents.sort(key=lambda a: a.state.taskPriority)
+                cycle_agents.sort(key=lambda a: (a.state.taskPriority, a.state.id))
                 victim = cycle_agents[0]
                 victim.recover_deadlock(context, f"Selected as deadlock resolution candidate in cycle {cycle_key}.")
+                victim.state.waitSeconds = 0.0
                 self.emit_event(victim.state.id, "DEADLOCK_RESOLVED", f"{victim.state.id} yielded and rerouted to clear cycle {cycle_key}.", None, "Deadlock cleared.")
 
     def _check_collisions(self, context: AgentContext):
@@ -496,7 +554,7 @@ class SimulationEngine:
             speed=self.speed,
             robots=sanitized_robots,
             tasks=self.tasks,
-            events=self.events[-30:],
+            events=self.events[:30],
             conflicts=self.conflicts[-20:],
             blockedEdges=list(self.blocked_edges),
             reservations=[r for r in self.reservations if r.status == "ACTIVE"],

@@ -344,19 +344,128 @@ function DebugGraphOverlay({ nodes, edges, debugMode }: { nodes: Map<string, Dat
   );
 }
 
-function Robot({ robot, nodes, selected, onSelect, debugMode }: {
+function LidarScannerField({
+  isBlocked,
+  isMoving,
+}: {
+  isBlocked: boolean;
+  isMoving: boolean;
+}) {
+  const sweepRef = useRef<THREE.Group>(null);
+  const ring1Ref = useRef<THREE.Mesh>(null);
+  const ring2Ref = useRef<THREE.Mesh>(null);
+
+  useFrame(({ clock }) => {
+    const t = clock.getElapsedTime();
+    if (sweepRef.current) {
+      const freq = isBlocked ? 9.0 : 4.5;
+      const sweepAngle = Math.sin(t * freq) * 0.62;
+      sweepRef.current.rotation.y = sweepAngle;
+    }
+    const pulseSpeed = isBlocked ? 2.8 : 1.4;
+    const p1 = (t * pulseSpeed) % 1.0;
+    const p2 = (t * pulseSpeed + 0.5) % 1.0;
+    if (ring1Ref.current) {
+      const s = 0.5 + p1 * 2.5;
+      ring1Ref.current.scale.set(s, s, 1);
+      (ring1Ref.current.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 0.75 * (1 - p1));
+    }
+    if (ring2Ref.current) {
+      const s = 0.5 + p2 * 2.5;
+      ring2Ref.current.scale.set(s, s, 1);
+      (ring2Ref.current.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 0.75 * (1 - p2));
+    }
+  });
+
+  const fanColor = isBlocked ? "#ef4444" : isMoving ? "#06b6d4" : "#10b981";
+  const fanOpacity = isBlocked ? 0.35 : 0.16;
+  const rayColor = isBlocked ? "#ff2222" : "#22d3ee";
+
+  return (
+    <group position={[0.55, -0.27, 0]}>
+      {/* 80° LiDAR Scanning Field Sector Fan */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.3, 3.0, 32, 1, -Math.PI / 4.5, (2 * Math.PI) / 4.5]} />
+        <meshBasicMaterial color={fanColor} transparent opacity={fanOpacity} side={THREE.DoubleSide} depthWrite={false} />
+      </mesh>
+
+      {/* Outer border arc */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[2.96, 3.02, 32, 1, -Math.PI / 4.5, (2 * Math.PI) / 4.5]} />
+        <meshBasicMaterial color={fanColor} transparent opacity={isBlocked ? 0.85 : 0.45} side={THREE.DoubleSide} depthWrite={false} />
+      </mesh>
+
+      {/* Concentric Pulsing Ultrasonic / LiDAR Wave Rings */}
+      <mesh ref={ring1Ref} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.96, 1.04, 28, 1, -Math.PI / 4.5, (2 * Math.PI) / 4.5]} />
+        <meshBasicMaterial color={fanColor} transparent side={THREE.DoubleSide} depthWrite={false} />
+      </mesh>
+      <mesh ref={ring2Ref} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.96, 1.04, 28, 1, -Math.PI / 4.5, (2 * Math.PI) / 4.5]} />
+        <meshBasicMaterial color={fanColor} transparent side={THREE.DoubleSide} depthWrite={false} />
+      </mesh>
+
+      {/* Sweeping Laser Raycast Beam */}
+      <group ref={sweepRef}>
+        <Line
+          points={[[0, 0.01, 0], [2.95, 0.01, 0]]}
+          color={rayColor}
+          lineWidth={isBlocked ? 3.5 : 2.0}
+          transparent
+          opacity={0.9}
+        />
+        <mesh position={[2.95, 0.01, 0]}>
+          <sphereGeometry args={[0.05, 10, 10]} />
+          <meshBasicMaterial color={rayColor} />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
+function Robot({ robot, nodes, allRobots, selected, onSelect, debugMode }: {
   robot: Datum;
   nodes: Map<string, Datum>;
+  allRobots?: Datum[];
   selected: boolean;
   onSelect: () => void;
   debugMode?: boolean;
 }) {
   const color = robotColor(robot.status);
-  const routePoints = (Array.isArray(robot.route) ? robot.route : [])
+
+  // 1. BEST & SHORTEST ROUTE (Dark Green along the corridor grid):
+  // Forward-connecting from robot position to nextNode, nextNode2... (prevents diagonal backward jumps)
+  const remainingRouteIds = Array.isArray(robot.route)
+    ? (robot.route.length > 1 ? robot.route.slice(1) : robot.route)
+    : [];
+  const forwardRoutePoints = remainingRouteIds
     .map((id: string) => nodes.get(id))
     .filter(Boolean)
     .map((node: Datum) => [node.x, 0.18, node.y] as [number, number, number]);
-  const route = [[robot.x, 0.18, robot.y] as [number, number, number], ...routePoints];
+  const bestRoute = forwardRoutePoints.length > 0
+    ? [[robot.x, 0.18, robot.y] as [number, number, number], ...forwardRoutePoints]
+    : [];
+
+  const statusStr = String(robot.status ?? "").toUpperCase();
+  const isBlocked = ["WAITING", "YIELDING", "BLOCKED", "NEGOTIATING", "REROUTING", "RECOVERING"].includes(statusStr);
+  const isMoving = statusStr === "MOVING";
+  const isActive = isMoving || isBlocked || Boolean(robot.currentTaskId);
+
+  // 2. OBSTACLE DETOUR ROUTE:
+  // ONLY shown when the robot has an obstacle / changed route due to obstacle!
+  const hasObstacleDetour =
+    (isBlocked || robot.intent === "DETOUR" || statusStr === "REROUTING" || statusStr === "RECOVERING") &&
+    Array.isArray(robot.alternativeRoute) &&
+    robot.alternativeRoute.length > 1;
+
+  const altRouteNodes = hasObstacleDetour
+    ? (robot.alternativeRoute.length > 1 ? robot.alternativeRoute.slice(1) : robot.alternativeRoute)
+        .map((id: string) => nodes.get(id))
+        .filter(Boolean)
+    : [];
+  const altRoute = altRouteNodes.length > 0
+    ? [[robot.x, 0.22, robot.y] as [number, number, number], ...altRouteNodes.map((n: Datum) => [n.x, 0.22, n.y] as [number, number, number])]
+    : [];
 
   // Dynamic vertical carriage height & forklift arm extension
   const isPickingPhase =
@@ -380,20 +489,167 @@ function Robot({ robot, nodes, selected, onSelect, debugMode }: {
   // Packages are only carried AFTER picking item from shelf
   const isCarryingPackage = isDeliveringPhase || (Boolean(robot.currentTaskId) && !isPickingPhase);
 
+  // Target obstacle identification for laser rangefinder
+  let targetObstaclePos: [number, number, number] | null = null;
+  let distToObstacle = 1.0;
+  if (isBlocked) {
+    if (robot.waitingFor && allRobots) {
+      const peer = allRobots.find((r) => r.id === robot.waitingFor);
+      if (peer) {
+        targetObstaclePos = [Number(peer.x ?? 0), 0.15, Number(peer.y ?? 0)];
+        distToObstacle = Math.hypot(Number(robot.x ?? 0) - Number(peer.x ?? 0), Number(robot.y ?? 0) - Number(peer.y ?? 0));
+      }
+    }
+    if (!targetObstaclePos && Array.isArray(robot.route) && robot.route.length > 1) {
+      const nextNode = nodes.get(robot.route[1]);
+      if (nextNode) {
+        targetObstaclePos = [nextNode.x, 0.15, nextNode.y];
+        distToObstacle = Math.hypot(Number(robot.x ?? 0) - nextNode.x, Number(robot.y ?? 0) - nextNode.y);
+      }
+    }
+  }
+
+  const chassisRef = useRef<THREE.Group>(null);
+  const labelsRef = useRef<THREE.Group>(null);
+  const wheelsRef = useRef<(THREE.Group | null)[]>([]);
+
+  const targetX = Number(robot.x ?? 0);
+  const targetZ = Number(robot.y ?? 0);
+  const targetRotY = -Number(robot.heading ?? 0);
+
+  const currentPos = useRef(new THREE.Vector3(targetX, 0.32, targetZ));
+  const currentRotY = useRef(targetRotY);
+  const wheelAngle = useRef(0);
+
+  useFrame((_, delta) => {
+    // If robot teleported or initialized far away (> 4.5m), snap immediately
+    const distToTarget = Math.hypot(targetX - currentPos.current.x, targetZ - currentPos.current.z);
+    if (distToTarget > 4.5) {
+      currentPos.current.set(targetX, 0.32, targetZ);
+      currentRotY.current = targetRotY;
+    } else {
+      // Smooth 60 FPS position glide
+      const posLerp = Math.min(1, delta * 14);
+      const prevX = currentPos.current.x;
+      const prevZ = currentPos.current.z;
+      currentPos.current.x = THREE.MathUtils.lerp(currentPos.current.x, targetX, posLerp);
+      currentPos.current.z = THREE.MathUtils.lerp(currentPos.current.z, targetZ, posLerp);
+      currentPos.current.y = 0.32;
+
+      // Smooth shortest-arc rotation steering (prevents 360 spin when crossing +/- PI)
+      let rotDiff = (targetRotY - currentRotY.current) % (Math.PI * 2);
+      if (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
+      if (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
+      const rotLerp = Math.min(1, delta * 12);
+      currentRotY.current += rotDiff * rotLerp;
+
+      // Realistic wheel rolling animation
+      const movedStep = Math.hypot(currentPos.current.x - prevX, currentPos.current.z - prevZ);
+      if (movedStep > 0.0001 || isMoving) {
+        const speedAdvance = Math.max(movedStep, isMoving ? Number(robot.velocity ?? 1.2) * delta * 0.9 : 0);
+        wheelAngle.current += speedAdvance / 0.13;
+        for (let i = 0; i < wheelsRef.current.length; i++) {
+          const w = wheelsRef.current[i];
+          if (w) w.rotation.z = -wheelAngle.current;
+        }
+      }
+    }
+
+    if (chassisRef.current) {
+      chassisRef.current.position.set(currentPos.current.x, currentPos.current.y, currentPos.current.z);
+      chassisRef.current.rotation.y = currentRotY.current;
+    }
+    if (labelsRef.current) {
+      labelsRef.current.position.set(currentPos.current.x, 0, currentPos.current.z);
+    }
+  });
+
   return (
     <group>
-      {route.length > 1 && (
-        <Line points={route} color={selected ? "#bd8425" : "#198b77"} lineWidth={selected ? 2 : 1.2} dashed dashSize={0.35} gapSize={0.22} transparent opacity={0.78} />
+      {/* Best & Shortest Route (Dark Green along grid) */}
+      {bestRoute.length > 1 && (
+        <Line points={bestRoute} color={selected ? "#d97706" : "#166534"} lineWidth={selected ? 2.5 : 1.8} dashed dashSize={0.4} gapSize={0.22} transparent opacity={0.85} />
       )}
-      {selected && (
-        <mesh position={[robot.x, 0.045, robot.y]} rotation={[-Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[0.78, 0.88, 48]} />
-          <meshBasicMaterial color="#bd8425" transparent opacity={0.78} />
-        </mesh>
+
+      {/* Obstacle Detour Route: ONLY show when there is an active obstacle or detour! */}
+      {hasObstacleDetour && altRoute.length > 1 && (
+        <group>
+          {/* Main glowing obstacle detour route path */}
+          <Line
+            points={altRoute}
+            color="#eab308"
+            lineWidth={3.5}
+            transparent
+            opacity={0.95}
+          />
+          {/* Animated pulse highlight line */}
+          <Line
+            points={altRoute}
+            color="#22c55e"
+            lineWidth={5.5}
+            dashed
+            dashSize={0.4}
+            gapSize={0.2}
+            transparent
+            opacity={0.8}
+          />
+          {/* Detour waypoint beacons */}
+          {altRoute.slice(1).map((pt, i) => (
+            <group key={`alt-wp-${i}`} position={pt}>
+              <mesh position={[0, -0.05, 0]}>
+                <cylinderGeometry args={[0.2, 0.2, 0.06, 16]} />
+                <meshStandardMaterial color="#22c55e" emissive="#22c55e" emissiveIntensity={0.8} />
+              </mesh>
+              <mesh position={[0, 0.12, 0]}>
+                <coneGeometry args={[0.1, 0.22, 10]} />
+                <meshBasicMaterial color="#eab308" />
+              </mesh>
+            </group>
+          ))}
+          {/* Floating Waypoint Label showing the Detour Turn */}
+          {altRoute[1] && (
+            <LabelSprite
+              position={[altRoute[1][0], 0.85, altRoute[1][2]]}
+              text="⚠️ OBSTACLE DETOUR ROUTE"
+              tone="blocked"
+              size={[2.3, 0.42]}
+            />
+          )}
+        </group>
       )}
+
+      {/* Laser Rangefinder to Blocked Obstacle / Peer */}
+      {isBlocked && targetObstaclePos && (
+        <group>
+          <Line
+            points={[
+              [robot.x, 0.45, robot.y],
+              [targetObstaclePos[0], 0.35, targetObstaclePos[2]],
+            ]}
+            color="#ef4444"
+            lineWidth={3.2}
+            dashed
+            dashSize={0.25}
+            gapSize={0.15}
+          />
+          <mesh position={[targetObstaclePos[0], 0.08, targetObstaclePos[2]]} rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[0.65, 0.82, 32]} />
+            <meshBasicMaterial color="#ef4444" transparent opacity={0.85} side={THREE.DoubleSide} />
+          </mesh>
+          <LabelSprite
+            position={[targetObstaclePos[0], 1.35, targetObstaclePos[2]]}
+            text={`⚠️ OBSTACLE (${distToObstacle.toFixed(1)}m)`}
+            tone="blocked"
+            size={[1.8, 0.36]}
+          />
+        </group>
+      )}
+
+      {/* Smooth 60 FPS Driving Robot Chassis */}
       <group
-        position={[robot.x, 0.32, robot.y]}
-        rotation={[0, -Number(robot.heading ?? 0), 0]}
+        ref={chassisRef}
+        position={[targetX, 0.32, targetZ]}
+        rotation={[0, targetRotY, 0]}
         onClick={(event) => {
           event.stopPropagation();
           onSelect();
@@ -401,6 +657,11 @@ function Robot({ robot, nodes, selected, onSelect, debugMode }: {
         onPointerOver={() => { document.body.style.cursor = "pointer"; }}
         onPointerOut={() => { document.body.style.cursor = "default"; }}
       >
+        {/* Active LiDAR Sensor Scanner Field */}
+        {isActive && (
+          <LidarScannerField isBlocked={isBlocked} isMoving={isMoving} />
+        )}
+
         {/* Drive Base Chassis (SOLO Style Cart Base) */}
         <mesh castShadow receiveShadow>
           <boxGeometry args={[1.18, 0.34, 0.86]} />
@@ -515,14 +776,42 @@ function Robot({ robot, nodes, selected, onSelect, debugMode }: {
           <meshStandardMaterial color="#eab308" metalness={0.9} roughness={0.1} />
         </mesh>
 
-        {/* 4 Wheels at Base Chassis */}
-        {[-0.36, 0.36].flatMap((z) =>
-          [-0.38, 0.38].map((x) => (
-            <mesh key={`${x}-${z}`} position={[x, -0.12, z]} rotation={[Math.PI / 2, 0, 0]} castShadow>
-              <cylinderGeometry args={[0.13, 0.13, 0.1, 14]} />
-              <meshStandardMaterial color="#24312f" roughness={0.86} />
-            </mesh>
-          )),
+        {/* 4 Wheels at Base Chassis with Rolling Axles & Industrial Hubcaps */}
+        {[-0.36, 0.36].flatMap((z, zIdx) =>
+          [-0.38, 0.38].map((x, xIdx) => {
+            const wheelIdx = zIdx * 2 + xIdx;
+            return (
+              <group key={`${x}-${z}`} position={[x, -0.12, z]}>
+                <group
+                  ref={(el) => {
+                    wheelsRef.current[wheelIdx] = el;
+                  }}
+                >
+                  {/* Wheel tire cylinder */}
+                  <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
+                    <cylinderGeometry args={[0.13, 0.13, 0.1, 16]} />
+                    <meshStandardMaterial color="#24312f" roughness={0.86} />
+                  </mesh>
+                  {/* High-contrast yellow industrial wheel hubcap */}
+                  <mesh position={[0, 0, z > 0 ? 0.052 : -0.052]} rotation={[Math.PI / 2, 0, 0]}>
+                    <circleGeometry args={[0.075, 8]} />
+                    <meshStandardMaterial color="#f59e0b" roughness={0.4} metalness={0.3} />
+                  </mesh>
+                  {/* Spoke bolt pattern for vivid visual rolling indicator */}
+                  {[-0.038, 0.038].map((offset) => (
+                    <mesh
+                      key={offset}
+                      position={[offset, 0, z > 0 ? 0.054 : -0.054]}
+                      rotation={[Math.PI / 2, 0, 0]}
+                    >
+                      <circleGeometry args={[0.015, 6]} />
+                      <meshBasicMaterial color="#1e293b" />
+                    </mesh>
+                  ))}
+                </group>
+              </group>
+            );
+          }),
         )}
 
         {/* Developer Debug Wireframe & Heading Vector Arrow */}
@@ -540,12 +829,34 @@ function Robot({ robot, nodes, selected, onSelect, debugMode }: {
         )}
       </group>
 
-      <LabelSprite
-        position={[robot.x, 1.95, robot.y]}
-        text={`${robot.id} · ${String(robot.status ?? "IDLE").replaceAll("_", " ")}`}
-        tone="robot"
-        size={[2.1, 0.44]}
-      />
+      {/* Floating Digital-Twin Labels & Selection Indicator (Smooth 60 FPS Tracking) */}
+      <group ref={labelsRef} position={[targetX, 0, targetZ]}>
+        {selected && (
+          <mesh position={[0, 0.045, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[0.78, 0.88, 48]} />
+            <meshBasicMaterial color="#bd8425" transparent opacity={0.78} />
+          </mesh>
+        )}
+
+        <LabelSprite
+          position={[0, isBlocked ? 2.45 : 1.95, 0]}
+          text={
+            isBlocked
+              ? `${robot.id} · ${String(robot.status).replaceAll("_", " ")} (${robot.waitingFor ? `WAITING FOR ${robot.waitingFor}` : "PATH BLOCKED"})`
+              : `${robot.id} · ${String(robot.status ?? "IDLE").replaceAll("_", " ")}`
+          }
+          tone={isBlocked ? "blocked" : "robot"}
+          size={isBlocked ? [2.8, 0.48] : [2.1, 0.44]}
+        />
+        {isBlocked && (
+          <LabelSprite
+            position={[0, 1.95, 0]}
+            text="📡 SENSORS ACTIVE · SCANNING DETOUR"
+            tone="station"
+            size={[2.3, 0.38]}
+          />
+        )}
+      </group>
     </group>
   );
 }
@@ -859,6 +1170,7 @@ export function WarehouseScene3D({
               key={robot.id}
               robot={robot}
               nodes={nodeMap}
+              allRobots={robots}
               selected={robot.id === selectedId}
               onSelect={() => onSelect(robot.id)}
               debugMode={debugMode}

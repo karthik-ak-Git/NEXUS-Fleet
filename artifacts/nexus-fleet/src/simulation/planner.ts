@@ -72,9 +72,9 @@ export function planRoute(
         edge.length * 0.045 +
         edge.congestion * 2.4 +
         edge.risk * 3 +
-        (isReserved ? 8 : 0) +
-        (avoided ? 6 : 0) +
-        edge.occupancy.filter((robotId) => robotId !== options.robotId).length * 1.8 +
+        (isReserved ? 22 : 0) +
+        (avoided ? 35 : 0) +
+        edge.occupancy.filter((robotId) => robotId !== options.robotId).length * 4.0 +
         edge.length * (options.energyWeight ?? 0.04);
       const nextCost = (costSoFar.get(current.id) ?? 0) + edgeCost;
 

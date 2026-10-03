@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { SimulationEngine } from "./engine";
 import type { SimulationSnapshot } from "./types";
 
-const BACKEND_WS_URL = "ws://localhost:8000/ws/fleet";
-const BACKEND_API_URL = "http://localhost:8000/api";
+const BACKEND_WS_URL = import.meta.env.VITE_WS_URL;
+const BACKEND_API_URL = import.meta.env.VITE_API_URL;
 
 export function useSimulation() {
   const engineRef = useRef<SimulationEngine | null>(null);
@@ -19,6 +19,7 @@ export function useSimulation() {
     let reconnectTimer: number | null = null;
 
     function connectWS() {
+      if (!BACKEND_WS_URL) return;
       try {
         ws = new WebSocket(BACKEND_WS_URL);
         ws.onopen = () => {
@@ -128,7 +129,7 @@ export function useSimulation() {
       fetch(`${BACKEND_API_URL}/tasks`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pickup, priority: 0.85 })
+        body: JSON.stringify({ pickup, sku, priority: 0.85 })
       }).catch(() => {});
     }
   }, [refresh]);
@@ -156,6 +157,18 @@ export function useSimulation() {
     setState((prev) => ({ ...prev, selectedRobotId: id }));
   }, []);
 
+  const dispatchOrderBatch = useCallback((products: Array<{ id?: string; name?: string; pickup: string; sku: string }>) => {
+    engineRef.current!.dispatchOrderBatch(products);
+    refresh();
+    if (isConnectedRef.current) {
+      fetch(`${BACKEND_API_URL}/orders/batch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ products })
+      }).catch(() => {});
+    }
+  }, [refresh]);
+
   return {
     state,
     start,
@@ -165,6 +178,7 @@ export function useSimulation() {
     setScenario,
     inject,
     createTask,
+    dispatchOrderBatch,
     runBenchmark,
     runStressTest,
     runDemo,

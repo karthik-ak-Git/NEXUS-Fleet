@@ -83,9 +83,9 @@ def plan_route(
                 edge.length * 0.045 +
                 edge.congestion * 2.4 +
                 edge.risk * 3.0 +
-                (8.0 if is_reserved else 0.0) +
-                (6.0 if avoided else 0.0) +
-                len(occupants) * 1.8 +
+                (22.0 if is_reserved else 0.0) +
+                (35.0 if avoided else 0.0) +
+                len(occupants) * 4.0 +
                 edge.length * energy_weight
             )
 

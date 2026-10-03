@@ -92,11 +92,16 @@ export class RobotAgent {
   private localReservationId: string | null = null;
 
   constructor(id: string, startingNode: string, node: WarehouseNode) {
+    const initialHeading = startingNode.startsWith("N-0-")
+      ? Math.PI / 2
+      : startingNode.startsWith("N-5-")
+        ? -Math.PI / 2
+        : 0;
     this.state = {
       id,
       x: node.x,
       y: node.y,
-      heading: 0,
+      heading: initialHeading,
       velocity: 0,
       acceleration: 0,
       battery: 84 + (Number(id.slice(-2)) * 3) % 15,
@@ -348,14 +353,27 @@ export class RobotAgent {
     }
 
     const nextNode = this.state.route[1] ?? null;
+    if (nextNode) {
+      const nextNodeObj = nodeById(context.nodes, nextNode);
+      if (nextNodeObj && this.state.velocity === 0 && !["WAITING", "YIELDING"].includes(this.state.status)) {
+        this.state.heading = Math.atan2(nextNodeObj.y - this.state.y, nextNodeObj.x - this.state.x);
+      }
+    }
     if (!nextNode) {
       this.state.velocity = 0;
+      const homeNode = this.getHomeSlot();
       if (this.chargeTarget && this.state.currentNode === this.chargeTarget) {
         this.state.status = "CHARGING";
         this.state.intent = "CHARGE";
         this.state.battery = Math.min(100, this.state.battery + dt * 5.5);
         if (this.state.battery >= 88) this.finishCharging(context);
-      } else if (this.state.currentTaskId && goal === this.state.currentNode) {
+      } else if (this.state.currentNode === homeNode && !this.state.currentTaskId) {
+        this.state.status = "IDLE";
+        this.state.intent = "CHARGING";
+        this.state.battery = Math.min(100, this.state.battery + dt * 3.5);
+        this.state.destination = null;
+        this.state.reason = `Docked at assigned charging slot ${homeNode}.`;
+      } else if (this.state.currentTaskId && (goal === this.state.currentNode || Math.hypot(this.state.x - (nodeById(context.nodes, goal)?.x ?? 99), this.state.y - (nodeById(context.nodes, goal)?.y ?? 99)) < 1.25)) {
         this.updateTaskPhase(context);
       }
       this.state.battery = Math.max(0, this.state.battery - dt * 0.004);
@@ -456,12 +474,59 @@ export class RobotAgent {
         (Math.abs(ownPriority - otherPriority) < 0.0001 &&
           this.state.id.localeCompare(peerId) < 0);
       if (!wins) {
-        this.waitFor(peerId, context, "YIELD");
-        predictedConflict.decision = `${this.state.id} YIELDS`;
-        this.state.status = "YIELDING";
-        this.state.reason = `${peerId} has higher right-of-way priority (${otherPriority.toFixed(2)} vs ${ownPriority.toFixed(2)}).`;
-        this.sendDecision(context, "YIELD", this.state.reason, predictedConflict.resource, peerId);
-        return predictedConflict;
+          const waitTime = other?.nextEta ?? 0;
+          this.waitFor(peerId, context, "YIELD");
+          predictedConflict.decision = `${this.state.id} YIELDS`;
+          this.state.status = "YIELDING";
+          this.state.reason = `${peerId} has higher right-of-way priority (${otherPriority.toFixed(2)} vs ${ownPriority.toFixed(2)}).`;
+          this.sendDecision(context, "YIELD", this.state.reason, predictedConflict.resource, peerId);
+
+          const currentGoal = this.state.destination ?? (this.state.route.length > 0 ? this.state.route[this.state.route.length - 1] : null);
+          if (currentGoal && currentGoal !== this.state.currentNode) {
+            const occupied = new Set<string>();
+            for (const r of context.robots) {
+              if (r.id !== this.state.id && r.health !== "FAILED") {
+                if (r.currentNode && r.currentNode !== currentGoal) occupied.add(r.currentNode);
+                if (r.currentWaypoint && r.currentWaypoint !== currentGoal) occupied.add(r.currentWaypoint);
+              }
+            }
+            const alt = planRoute(this.state.currentNode, currentGoal, {
+              nodes: context.nodes,
+              edges: context.edges,
+              blockedEdges: this.localBlockedEdges,
+              blockedNodes: new Set([predictedConflict.resource]),
+              avoidNodes: occupied,
+              reservations: context.reservations,
+              robotId: this.state.id,
+            });
+            if (alt && alt.nodes.length > 1) {
+              this.state.alternativeRoute = [...alt.nodes];
+              const otherStopped = other && (["WAITING", "YIELDING", "BLOCKED"].includes(other.status) || (other.nextEta ?? 0) > 1.5);
+              if (this.state.waitSeconds >= 0.5 || otherStopped || waitTime > 1.5) {
+                if (this.localReservationId) context.release(this.localReservationId);
+                this.localReservationId = null;
+                this.state.currentReservation = null;
+                this.state.waitingFor = null;
+                this.previousRoute = [...this.state.route];
+                this.state.route = [...alt.nodes];
+                this.state.plannedRoute = [...alt.nodes];
+                this.state.status = "MOVING";
+                this.state.intent = "DETOUR";
+                this.state.rerouteCount += 1;
+                this.state.reason = `Sensors detected path to ${predictedConflict.resource} blocked by ${peerId}; shortest path updated to open corridor in front via ${alt.nodes.slice(1, 3).join(" -> ")}.`;
+                this.recordDecision(now, "SIDEWAY_DETOUR_TAKEN", this.state.reason);
+                context.emit(
+                  this.state.id,
+                  "DETOUR_SELECTED",
+                  this.state.reason,
+                  predictedConflict.resource,
+                  "Open way in front engaged.",
+                );
+                return predictedConflict;
+              }
+            }
+          }
+          return predictedConflict;
       }
       this.state.waitingFor = null;
       this.state.status = "NEGOTIATING";
@@ -519,10 +584,63 @@ export class RobotAgent {
           const wins = ownPriority > otherPriority ||
             (Math.abs(ownPriority - otherPriority) < 0.0001 && this.state.id.localeCompare(other.id) < 0);
           if (!wins) {
+            const waitTime = other?.eta ?? 0;
+            if (waitTime > 4.0) {
+              this.state.status = "REROUTING";
+              this.routeGoal = null;
+              this.state.reason = `Proximity block by ${other.id} would take ${waitTime.toFixed(1)}s; taking side way.`;
+              this.recordDecision(now, "REROUTE_SELECTED", this.state.reason);
+              break;
+            }
             this.state.status = "YIELDING";
             this.state.velocity = 0;
-            this.state.reason = `360° Proximity Sensor Alert: yielding right-of-way to ${other.id} (${dist.toFixed(2)}m).`;
+            this.state.waitingFor = other.id;
+            this.state.reason = `360 Proximity Sensor Alert: yielding right-of-way to ${other.id} (${dist.toFixed(2)}m).`;
             break;
+          }
+        }
+      }
+    }
+
+    if (this.state.waitingFor) this.state.waitSeconds += dt;
+
+    if (["YIELDING", "WAITING"].includes(this.state.status as string) && this.state.route.length > 1) {
+      const currentNext = this.state.route[1];
+      const goal = this.state.destination ?? this.state.route[this.state.route.length - 1];
+      if (currentNext && goal) {
+        const alt = planRoute(this.state.currentNode, goal, {
+          nodes: context.nodes,
+          edges: context.edges,
+          blockedEdges: this.localBlockedEdges,
+          blockedNodes: new Set([currentNext]),
+          reservations: context.reservations,
+          robotId: this.state.id,
+        });
+        if (alt && alt.nodes.length > 1) {
+          this.state.alternativeRoute = [...alt.nodes];
+          const peer = context.robots.find((r) => r.id === this.state.waitingFor);
+          const peerWaiting = peer && ["WAITING", "YIELDING", "BLOCKED"].includes(peer.status);
+          const peerEta = peer?.eta ?? 0;
+          if (this.state.waitSeconds >= 1.2 || peerWaiting || peerEta > 2.0) {
+            if (this.localReservationId) context.release(this.localReservationId);
+            this.localReservationId = null;
+            this.state.currentReservation = null;
+            this.state.waitingFor = null;
+            this.previousRoute = [...this.state.route];
+            this.state.route = [...alt.nodes];
+            this.state.plannedRoute = [...alt.nodes];
+            this.state.status = "MOVING";
+            this.state.intent = "DETOUR";
+            this.state.rerouteCount += 1;
+            this.state.reason = `Sensors detected path blocked by ${peer?.id ?? "obstacle"}; taking side way via ${alt.nodes.slice(1, 3).join(" -> ")}.`;
+            this.recordDecision(now, "SIDEWAY_DETOUR_TAKEN", this.state.reason);
+            context.emit(
+              this.state.id,
+              "DETOUR_SELECTED",
+              this.state.reason,
+              currentNext,
+              "Alternative route engaged.",
+            );
           }
         }
       }
@@ -532,7 +650,6 @@ export class RobotAgent {
       this.advance(dt, nextNode, context);
     }
     this.state.battery = Math.max(0, this.state.battery - dt * (0.018 + this.state.velocity * 0.003));
-    if (this.state.waitingFor) this.state.waitSeconds += dt;
     return predictedConflict;
   }
 
@@ -613,7 +730,7 @@ export class RobotAgent {
         blockedEdges: this.localBlockedEdges,
         reservations: context.reservations,
         robotId: this.state.id,
-        avoidNodes: new Set([currentNext]),
+        blockedNodes: new Set([currentNext]),
       });
       if (alternative && alternative.nodes.length > 1) {
         this.previousRoute = [...this.state.route];
@@ -621,6 +738,8 @@ export class RobotAgent {
         this.state.plannedRoute = [...alternative.nodes];
         this.state.alternativeRoute = [...alternative.nodes];
         this.state.rerouteCount += 1;
+        this.state.status = "MOVING";
+        this.state.intent = "DETOUR";
       }
     }
     this.recordDecision(context.now, "DEADLOCK_RECOVERY", reason);
@@ -649,7 +768,7 @@ export class RobotAgent {
       this.ensureRoute(task.destination, context);
     } 
     // 2. COUNTER DELIVERY & PACKAGE ACCEPTANCE HANDSHAKE PHASE:
-    else if (task.picked && (this.state.currentNode === task.destination || distToDest < 0.85)) {
+    else if (task.picked && (this.state.currentNode === task.destination || distToDest < 1.25)) {
       if (task.status === "COMPLETED") return;
       // Pack Counter Package Acceptance Handshake: ROBOT -> COUNTER
       task.picked = false;
@@ -667,6 +786,12 @@ export class RobotAgent {
       context.emit(this.state.id, "TASK_COMPLETED", this.state.reason, task.destination, task.id);
       this.recordDecision(context.now, "TASK_COMPLETE", this.state.reason);
       context.onTaskCompleted(task.id, this.state.id);
+
+      // Immediately release counter reservation so queued robots can advance
+      if (this.localReservationId) context.release(this.localReservationId);
+      this.localReservationId = null;
+      this.state.currentReservation = null;
+      context.releaseOwned(this.state.id);
 
       const queued = this.state.taskQueue.shift();
       const next = queued ? context.tasks.find((candidate) => candidate.id === queued) : null;
@@ -777,34 +902,24 @@ export class RobotAgent {
 
   private getCounterQueueTarget(taskDest: string, context: AgentContext): string {
     if (taskDest !== "N-2-8") return taskDest;
-    const queueSlots = ["N-2-8", "N-2-7", "N-2-6", "N-2-5"];
-    for (const slot of queueSlots) {
-      let owner: string | null = null;
-      for (const r of context.reservations) {
-        if (r.resourceId === slot && r.status === "ACTIVE" && r.endTime > context.now) {
-          if (r.ownerRobot !== this.state.id) {
-            owner = r.ownerRobot;
-            break;
-          }
-        }
-      }
-      if (!owner) {
-        for (const r of context.robots) {
-          if (r.id !== this.state.id && r.health !== "FAILED") {
-            if (r.currentNode === slot || r.currentWaypoint === slot) {
-              owner = r.id;
-              break;
-            }
-          }
-        }
-      }
-      if (!owner || owner === this.state.id) {
-        return slot;
-      }
-    }
-    return queueSlots[queueSlots.length - 1];
-  }
+    const counterOccupied = context.reservations.some(
+      (r) => r.resourceId === "N-2-8" && r.status === "ACTIVE" && r.endTime > context.now && r.ownerRobot !== this.state.id
+    ) || context.robots.some(
+      (r) => r.id !== this.state.id && r.health !== "FAILED" && (r.currentNode === "N-2-8" || r.currentWaypoint === "N-2-8")
+    );
+    if (!counterOccupied) return "N-2-8";
 
+    const queueSlots = ["N-2-7", "N-2-6", "N-2-5"];
+    for (const slot of queueSlots) {
+      const slotBusy = context.reservations.some(
+        (r) => r.resourceId === slot && r.status === "ACTIVE" && r.endTime > context.now && r.ownerRobot !== this.state.id
+      ) || context.robots.some(
+        (r) => r.id !== this.state.id && r.health !== "FAILED" && (r.currentNode === slot || r.currentWaypoint === slot)
+      );
+      if (!slotBusy) return slot;
+    }
+    return "N-2-7";
+  }
   private chooseGoal(context: AgentContext) {
     if (this.chargeTarget) return this.chargeTarget;
     const task = context.tasks.find((item) => item.id === this.state.currentTaskId);
@@ -837,17 +952,43 @@ export class RobotAgent {
     const nextEdge = nextNode
       ? edgeBetween(context.edges, this.state.currentNode, nextNode)
       : null;
+    const isNextBlockedByRobot = Boolean(
+      nextNode &&
+        context.robots.some(
+          (r) =>
+            r.id !== this.state.id &&
+            r.health !== "FAILED" &&
+            (r.currentNode === nextNode || r.currentWaypoint === nextNode),
+        ),
+    );
     const invalidated =
       this.routeGoal !== goal ||
       !this.state.route.length ||
       (nextEdge && (nextEdge.blocked || this.localBlockedEdges.has(nextEdge.id))) ||
-      (!nextEdge && this.state.currentNode !== goal && Boolean(nextNode));
+      (!nextEdge && this.state.currentNode !== goal && Boolean(nextNode)) ||
+      (isNextBlockedByRobot && (this.state.status === "WAITING" || this.state.status === "YIELDING" || this.state.waitSeconds >= 0.5));
     if (!invalidated && this.state.route.length > 1) return;
     const previous = [...this.state.route];
+    const blockedNodes = new Set<string>();
+    if (this.state.currentNode === "N-2-8") {
+      blockedNodes.add("N-2-7"); // Prevent exiting into incoming queue; force perimeter exit!
+    }
+    const avoidNodes = new Set<string>();
+    for (const r of context.robots) {
+      if (r.id !== this.state.id && r.health !== "FAILED") {
+        if (r.currentNode && r.currentNode !== goal) avoidNodes.add(r.currentNode);
+        if (r.currentWaypoint && r.currentWaypoint !== goal) avoidNodes.add(r.currentWaypoint);
+      }
+    }
+    if (isNextBlockedByRobot && (this.state.status === "WAITING" || this.state.status === "YIELDING" || this.state.waitSeconds >= 0.5)) {
+      blockedNodes.add(nextNode);
+    }
     const route = planRoute(this.state.currentNode, goal, {
       nodes: context.nodes,
       edges: context.edges,
+      blockedNodes,
       blockedEdges: this.localBlockedEdges,
+      avoidNodes,
       reservations: context.reservations,
       robotId: this.state.id,
       energyWeight: this.state.battery < 35 ? 0.12 : 0.04,
@@ -979,21 +1120,71 @@ export class RobotAgent {
       );
 
     if (resourceBusy) {
-      const blockerId = blockingRobot?.id ?? "traffic";
-      this.state.status = "WAITING";
-      this.state.intent = "WAITING_FOR_TRAFFIC";
-      this.state.reason = `Waiting for ${nextNode} (occupied by ${blockerId}).`;
-      this.state.waitSeconds += dt;
-      this.state.velocity = 0;
-      context.reserve(
-        this.state.currentNode,
-        this.state.id,
-        context.now,
-        context.now + 10,
-        this.priorityScore(context.now),
-      );
-      return;
-    }
+        const reservationBlocker = context.reservations.find(
+          (reservation) =>
+            reservation.status === "ACTIVE" &&
+            reservation.endTime > context.now &&
+            reservation.ownerRobot !== this.state.id &&
+            reservation.resourceId === nextNode
+        )?.ownerRobot;
+        const blockerId = blockingRobot?.id ?? reservationBlocker ?? "traffic";
+        this.state.waitingFor = blockingRobot?.id ?? reservationBlocker ?? null;
+        this.state.status = "WAITING";
+        this.state.intent = "WAITING_FOR_TRAFFIC";
+        this.state.reason = `Waiting for ${nextNode} (occupied by ${blockerId}).`;
+        this.state.waitSeconds += dt;
+        this.state.velocity = 0;
+
+        // SHORT-PATH FINDING: Detect open way in front!
+        const currentGoal = this.state.destination ?? (this.state.route.length > 0 ? this.state.route[this.state.route.length - 1] : null);
+        if (currentGoal && currentGoal !== this.state.currentNode) {
+          const occupied = new Set<string>();
+          for (const r of context.robots) {
+            if (r.id !== this.state.id && r.health !== "FAILED") {
+              if (r.currentNode && r.currentNode !== currentGoal) occupied.add(r.currentNode);
+              if (r.currentWaypoint && r.currentWaypoint !== currentGoal) occupied.add(r.currentWaypoint);
+            }
+          }
+          const alt = planRoute(this.state.currentNode, currentGoal, {
+            nodes: context.nodes,
+            edges: context.edges,
+            blockedEdges: this.localBlockedEdges,
+            blockedNodes: new Set([nextNode]),
+            avoidNodes: occupied,
+            reservations: context.reservations,
+            robotId: this.state.id,
+          });
+          if (alt && alt.nodes.length > 1) {
+            this.state.alternativeRoute = [...alt.nodes];
+            const peer = context.robots.find((r) => r.id === (blockingRobot?.id ?? reservationBlocker));
+            const peerStopped = peer && (["WAITING", "YIELDING", "BLOCKED", "IDLE"].includes(peer.status) || (peer.velocity ?? 0) === 0);
+            if (this.state.waitSeconds >= 0.5 || peerStopped) {
+              if (this.localReservationId) context.release(this.localReservationId);
+              this.localReservationId = null;
+              this.state.currentReservation = null;
+              this.state.waitingFor = null;
+              this.previousRoute = [...this.state.route];
+              this.state.route = [...alt.nodes];
+              this.state.plannedRoute = [...alt.nodes];
+              this.state.status = "MOVING";
+              this.state.intent = "DETOUR";
+              this.state.rerouteCount += 1;
+              this.state.reason = `Way to ${nextNode} occupied by ${blockerId}; taking open corridor in front via ${alt.nodes.slice(1, 3).join(" -> ")}.`;
+              this.recordDecision(context.now, "SIDEWAY_DETOUR_TAKEN", this.state.reason);
+              context.emit(
+                this.state.id,
+                "DETOUR_SELECTED",
+                this.state.reason,
+                nextNode,
+                "Open corridor in front engaged.",
+              );
+              this.advance(dt, alt.nodes[1], context);
+              return;
+            }
+          }
+        }
+        return;
+      }
     const edgeOccupants = edge.occupancy
       .filter((robotId) => robotId !== this.state.id)
       .map((robotId) => context.robots.find((robot) => robot.id === robotId))
@@ -1008,7 +1199,9 @@ export class RobotAgent {
     );
     const edgeAtCapacity = edgeOccupants.length >= edge.capacity;
     if (unsafeFollowingDistance || edgeAtCapacity) {
-      this.state.status = "WAITING";
+        const blocker = edgeOccupants.find(robot => Math.hypot(robot.x - this.state.x, robot.y - this.state.y) < 1.1) ?? edgeOccupants[0];
+        this.state.waitingFor = blocker?.id ?? null;
+        this.state.status = "WAITING";
       this.state.intent = "EDGE_CLEARANCE";
       this.state.reason = `Waiting for ${edge.id} to clear before entering the shared lane.`;
       this.state.waitSeconds += dt;
@@ -1034,8 +1227,10 @@ export class RobotAgent {
         ) ?? undefined;
       }
       if (!targetLease) {
-        this.state.status = "WAITING";
-        this.state.intent = "NODE_CLEARANCE";
+          const blockingReservation = context.reservations.find(r => r.resourceId === nextNode && r.status === "ACTIVE");
+          this.state.waitingFor = blockingReservation?.ownerRobot ?? null;
+          this.state.status = "WAITING";
+          this.state.intent = "NODE_CLEARANCE";
         this.state.reason = `Waiting for ${nextNode} to become available.`;
         this.state.waitSeconds += dt;
         this.state.velocity = 0;
@@ -1079,9 +1274,11 @@ export class RobotAgent {
       this.state.route = this.state.route.slice(1);
       this.state.plannedRoute = [...this.state.route];
       this.state.currentWaypoint = this.state.route[1] ?? null;
-      if (this.state.status === "RECOVERING") {
+      if (this.state.status === "RECOVERING" || this.state.intent === "DETOUR") {
         this.state.status = "MOVING";
-        this.state.reason = "Recovery waypoint reached; normal task route resumed.";
+        this.state.intent = "PROCEED";
+        this.state.reason = "Detour completed; normal shortest route resumed.";
+        this.state.alternativeRoute = [];
       }
       this.updateTaskPhase(context);
       edge.occupancy = edge.occupancy.filter((id) => id !== this.state.id);
@@ -1201,3 +1398,13 @@ export function estimatedTaskDistance(
   return (out ? routeDistance(out.nodes, edges) : 0) +
     (inPlan ? routeDistance(inPlan.nodes, edges) : 0);
 }
+
+
+
+
+
+
+
+
+
+

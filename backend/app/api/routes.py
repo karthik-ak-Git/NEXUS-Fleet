@@ -11,8 +11,8 @@ from ..supabase_client import supabase_service
 
 router = APIRouter()
 
-# Global singleton simulation engine instance
-global_engine = SimulationEngine(seed=26123, mode="distributed", robot_count=10, task_count=10)
+# Global singleton simulation engine instance (Dynamic Swarm: Swarm Size matches Number of Orders)
+global_engine = SimulationEngine(seed=26123, mode="distributed")
 
 def get_engine() -> SimulationEngine:
     return global_engine
@@ -21,6 +21,10 @@ class TaskCreateRequest(BaseModel):
     pickup: Optional[str] = None
     destination: Optional[str] = None
     priority: float = 0.8
+    sku: Optional[str] = None
+
+class BatchOrderRequest(BaseModel):
+    products: List[Dict[str, Any]]
 
 class AIExplainRequest(BaseModel):
     question: str
@@ -61,7 +65,7 @@ def get_tasks(engine: SimulationEngine = Depends(get_engine)):
 
 @router.post("/tasks", response_model=WarehouseTaskSchema)
 def create_task(req: TaskCreateRequest, engine: SimulationEngine = Depends(get_engine)):
-    task = engine.create_task(req.pickup, req.destination, req.priority)
+    task = engine.create_task(req.pickup, req.destination, req.priority, req.sku)
     
     # Audit log & Supabase sync
     task_dict = task.model_dump()
@@ -81,6 +85,17 @@ def create_task(req: TaskCreateRequest, engine: SimulationEngine = Depends(get_e
         "status": task.status,
     })
     return task
+
+@router.post("/orders/batch")
+def dispatch_order_batch_route(req: BatchOrderRequest, engine: SimulationEngine = Depends(get_engine)):
+    tasks = engine.dispatch_order_batch(req.products)
+    db_manager.add_audit_log(
+        category="SWARM",
+        action=f"Swarm reconfigured for {len(req.products)} batch orders",
+        actor="operator",
+        details=f"Active Swarm Size: {len(engine.agents)} AMRs, Orders: {len(tasks)}"
+    )
+    return {"status": "ok", "swarm_size": len(engine.agents), "tasks": tasks}
 
 @router.get("/events")
 def get_events(engine: SimulationEngine = Depends(get_engine)):

@@ -44,7 +44,7 @@ function statusTone(value: unknown) {
 
 export function FleetConsole() {
   const [, setLocation] = useLocation();
-  const { state, start, pause, reset, setSpeed, createTask, selectRobot } = useSimulation();
+  const { state, start, pause, reset, setSpeed, createTask, dispatchOrderBatch, selectRobot } = useSimulation();
 
   const [mapMode, setMapMode] = useState<'3d' | 'plan'>('3d');
   const [followRobot, setFollowRobot] = useState(false);
@@ -76,9 +76,7 @@ export function FleetConsole() {
 
   const handleDispatchBatchTasks = () => {
     if (!selectedProducts.length) return;
-    selectedProducts.forEach((prod) => {
-      createTask(prod.pickup, prod.sku);
-    });
+    dispatchOrderBatch(selectedProducts);
     setIsTaskModalOpen(false);
   };
 
@@ -112,6 +110,9 @@ export function FleetConsole() {
   const idleRobotsCount = robots.filter((r) => String(r.status).toUpperCase() === 'IDLE' && !r.currentTaskId).length;
 
   const events: Datum[] = Array.isArray(data?.events) ? data.events : [];
+  const sortedEvents = useMemo(() => {
+    return [...events].sort((a, b) => Number(b.time ?? 0) - Number(a.time ?? 0));
+  }, [events]);
   const conflicts: Datum[] = Array.isArray(data?.conflicts) ? data.conflicts : [];
   const metrics: Datum = data?.metrics ?? {};
   const selectedRobot = robots.find((robot) => str(robot.id) === data?.selectedRobotId) ?? null;
@@ -289,7 +290,7 @@ export function FleetConsole() {
           <div className="flex items-center justify-between border-b border-[#283834] pb-3">
             <div className="flex items-center space-x-3">
               <span className="text-xs font-mono text-[#3db89a] uppercase tracking-wider font-bold">PRIMARY DIGITAL TWIN VIEWPORT</span>
-              <span className="text-xs font-mono text-[#8aa39b]">48 Shelves · 10 AMRs · 10 Chargers · 4 Pack Counters</span>
+              <span className="text-xs font-mono text-[#8aa39b]">48 Shelves • Dynamic Swarm: {robots.length} AMRs = {tasks.length} Orders • 1 Pack Counter</span>
             </div>
             {selectedRobot && (
               <div className="text-xs font-mono text-amber-400 flex items-center gap-2 bg-[#111816] px-3 py-1 rounded-lg border border-[#283834]">
@@ -453,6 +454,45 @@ export function FleetConsole() {
           </div>
         </section>
 
+        {/* End-to-End Grocery Fulfillment Lifecycle Workflow */}
+        <section className="bg-[#17221f] border border-[#283834] rounded-xl p-4 shadow-xl space-y-3">
+          <div className="flex items-center justify-between border-b border-[#283834] pb-2 text-xs font-mono">
+            <span className="font-bold text-[#3db89a] uppercase tracking-wider flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-[#3db89a]" />
+              End-to-End Grocery Fulfillment Lifecycle Workflow
+            </span>
+            <span className="text-[#8aa39b]">Order &#8594; Best AMR Bid &#8594; Food Pickup &#8594; Counter Acceptance &#8594; Charger Return</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 pt-1">
+            <div className="bg-[#111816] p-3 rounded-lg border border-[#283834] text-xs">
+              <div className="text-[10px] font-mono text-[#3db89a] uppercase">Step 1</div>
+              <div className="font-bold text-white mt-1">Food Order Placed</div>
+              <p className="text-[#8aa39b] text-[11px] mt-1">Specific item selected (e.g. Apples, Milk, Bread). Only ordered items trigger AMR bids.</p>
+            </div>
+            <div className="bg-[#111816] p-3 rounded-lg border border-[#283834] text-xs">
+              <div className="text-[10px] font-mono text-[#3db89a] uppercase">Step 2</div>
+              <div className="font-bold text-white mt-1">Best AMR Auctioned</div>
+              <p className="text-[#8aa39b] text-[11px] mt-1">Idle AMRs bid based on distance &amp; battery. Lowest cost AMR launches; unassigned AMRs rest at dock.</p>
+            </div>
+            <div className="bg-[#111816] p-3 rounded-lg border border-[#283834] text-xs">
+              <div className="text-[10px] font-mono text-[#3db89a] uppercase">Step 3</div>
+              <div className="font-bold text-white mt-1">Food Item Picked</div>
+              <p className="text-[#8aa39b] text-[11px] mt-1">Robot reaches designated rack, loads item, and routes directly to Pack Counter (N-2-8).</p>
+            </div>
+            <div className="bg-[#111816] p-3 rounded-lg border border-[#283834] text-xs">
+              <div className="text-[10px] font-mono text-[#3db89a] uppercase">Step 4</div>
+              <div className="font-bold text-white mt-1">Counter Handshake</div>
+              <p className="text-[#8aa39b] text-[11px] mt-1">Pack Counter accepts package immediately, order completed, counter lease released for next AMR.</p>
+            </div>
+            <div className="bg-[#111816] p-3 rounded-lg border border-[#283834] text-xs">
+              <div className="text-[10px] font-mono text-[#3db89a] uppercase">Step 5</div>
+              <div className="font-bold text-white mt-1">Perimeter Dock Return</div>
+              <p className="text-[#8aa39b] text-[11px] mt-1">AMR exits via perimeter loop to avoid queue, returns to home charger slot, and docks.</p>
+            </div>
+          </div>
+        </section>
+
         {/* ORDERS & TASK FIFO QUEUE TABLE (PART 9, 32) */}
         <section className="bg-[#17221f] border border-[#283834] rounded-xl p-4 shadow-xl space-y-4">
           <div className="flex items-center justify-between border-b border-[#283834] pb-3">
@@ -531,8 +571,8 @@ export function FleetConsole() {
             </span>
           </div>
 
-          <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-            {events.slice(0, 8).map((event, idx) => (
+          <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+            {sortedEvents.slice(0, 20).map((event, idx) => (
               <div key={str(event.id, String(idx))} className="p-2.5 rounded-lg bg-[#111816] border border-[#283834] text-xs space-y-1 font-mono">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-[#3db89a]">{str(event.type).replaceAll('_', ' ')}</span>
@@ -609,7 +649,7 @@ export function FleetConsole() {
                 <span className="text-[#8aa39b]">Fleet Auto Assignment:</span>
                 <span className="text-amber-400 font-bold flex items-center gap-1">
                   <Bot size={15} />
-                  FIFO Queue Assignment (AMR-01 .. AMR-10)
+                  Dynamic 1:1 Swarm (AMR-01 .. AMR-{String(selectedProducts.length).padStart(2, "0")})
                 </span>
               </div>
             </div>
@@ -629,7 +669,7 @@ export function FleetConsole() {
                 className="px-5 py-2 rounded-lg bg-[#2e8b75] hover:bg-[#38a38a] disabled:opacity-40 text-white text-sm font-bold flex items-center gap-2 transition-all shadow-md cursor-pointer"
               >
                 <Plus size={16} />
-                <span>Dispatch {selectedProducts.length} Batch Task{selectedProducts.length === 1 ? '' : 's'}</span>
+                <span>Launch Swarm ({selectedProducts.length} Bots for {selectedProducts.length} Orders)</span>
               </button>
             </div>
           </div>

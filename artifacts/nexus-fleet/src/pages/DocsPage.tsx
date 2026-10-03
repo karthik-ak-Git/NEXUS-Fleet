@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { ArrowLeft, BookOpen, Bot, Cpu, Radio, ShieldCheck, FileText, Server, Code, Award, ExternalLink, Activity, Terminal } from "lucide-react";
+import { ArrowLeft, BookOpen, Bot, Cpu, Radio, ShieldCheck, FileText, Server, Code, Award, ExternalLink, Activity, Terminal, Boxes } from "lucide-react";
 
 export function DocsPage() {
   const [, setLocation] = useLocation();
@@ -111,6 +111,44 @@ export function DocsPage() {
               <p className="text-[#a4beb5] leading-relaxed">
                 NEXUS-Fleet transforms Autonomous Mobile Robots (AMRs) into decentralized Edge-AI agents capable of real-time peer-to-peer task bidding, corridor reservation, dynamic conflict negotiation, and silent low-battery charger docking without relying on a centralized cloud orchestrator.
               </p>
+
+              {/* End-to-End Grocery Fulfillment Lifecycle Workflow */}
+              <div className="bg-[#111816] p-6 rounded-xl border border-[#283834] space-y-4">
+                <h3 className="font-semibold text-white text-lg flex items-center gap-2">
+                  <Boxes className="text-[#3db89a]" size={20} />
+                  <span>End-to-End Grocery Order Fulfillment Workflow</span>
+                </h3>
+                <p className="text-[#a4beb5] text-sm leading-relaxed">
+                  How NEXUS-Fleet executes deterministic order-to-delivery cycles with optimal AMR allocation:
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-3 pt-2">
+                  <div className="bg-[#17221f] p-3 rounded-lg border border-[#283834] text-xs">
+                    <span className="text-[10px] font-mono text-[#3db89a] font-bold">STAGE 1</span>
+                    <h4 className="font-bold text-white mt-1">Order Placement</h4>
+                    <p className="text-[#8aa39b] mt-1 text-[11px]">Food item selected from 6 catalog SKUs (Apples, Milk, Bread, Oil, Coffee, Chocolate). Only active orders trigger AMR auctions.</p>
+                  </div>
+                  <div className="bg-[#17221f] p-3 rounded-lg border border-[#283834] text-xs">
+                    <span className="text-[10px] font-mono text-[#3db89a] font-bold">STAGE 2</span>
+                    <h4 className="font-bold text-white mt-1">Best AMR Auction</h4>
+                    <p className="text-[#8aa39b] mt-1 text-[11px]">Idle AMRs compute bids based on dock distance &amp; battery. Lowest-cost robot wins; unassigned AMRs stay docked at home chargers.</p>
+                  </div>
+                  <div className="bg-[#17221f] p-3 rounded-lg border border-[#283834] text-xs">
+                    <span className="text-[10px] font-mono text-[#3db89a] font-bold">STAGE 3</span>
+                    <h4 className="font-bold text-white mt-1">Shelf Item Pick</h4>
+                    <p className="text-[#8aa39b] mt-1 text-[11px]">Winning AMR navigates to rack node (e.g. N-1-1), loads food crate, and sets destination to Pack Counter (N-2-8).</p>
+                  </div>
+                  <div className="bg-[#17221f] p-3 rounded-lg border border-[#283834] text-xs">
+                    <span className="text-[10px] font-mono text-[#3db89a] font-bold">STAGE 4</span>
+                    <h4 className="font-bold text-white mt-1">Counter Acceptance</h4>
+                    <p className="text-[#8aa39b] mt-1 text-[11px]">Pack Counter (PACK-02) executes instant handshake, marks task COMPLETED, and releases node reservation for queued AMRs.</p>
+                  </div>
+                  <div className="bg-[#17221f] p-3 rounded-lg border border-[#283834] text-xs">
+                    <span className="text-[10px] font-mono text-[#3db89a] font-bold">STAGE 5</span>
+                    <h4 className="font-bold text-white mt-1">Perimeter Dock Return</h4>
+                    <p className="text-[#8aa39b] mt-1 text-[11px]">AMR routes via perimeter loop (avoiding incoming queue on row 2), docks at assigned charger, and enters CHARGING state.</p>
+                  </div>
+                </div>
+              </div>
 
               <div className="bg-[#111816] p-6 rounded-xl border border-[#283834] space-y-4">
                 <h3 className="font-semibold text-white text-lg flex items-center gap-2">

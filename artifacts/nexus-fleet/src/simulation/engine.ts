@@ -38,6 +38,15 @@ const EVENT_LIMIT = 240;
 const ROBOT_IDS = ["AMR-01", "AMR-02", "AMR-03", "AMR-04", "AMR-05", "AMR-06", "AMR-07", "AMR-08", "AMR-09", "AMR-10"];
 const PRIORITIES = [0.95, 0.88, 0.82, 0.75, 0.68, 0.62, 0.58, 0.52, 0.45, 0.40];
 
+export const GROCERY_FOOD_ORDERS = [
+  { name: "Organic Honeycrisp Apples", pickup: "N-1-1", sku: "SKU-A11-ORGANIC_APPLES" },
+  { name: "Fresh Whole Milk 1L", pickup: "N-1-2", sku: "SKU-B12-FRESH_MILK" },
+  { name: "Artisan Whole Wheat Bread", pickup: "N-2-1", sku: "SKU-C13-WHOLE_WHEAT_BREAD" },
+  { name: "Extra Virgin Olive Oil 500ml", pickup: "N-2-2", sku: "SKU-D14-OLIVE_OIL" },
+  { name: "Dark Roasted Coffee Beans", pickup: "N-3-1", sku: "SKU-E15-ROASTED_COFFEE" },
+  { name: "70% Dark Chocolate Bar", pickup: "N-3-2", sku: "SKU-B14-CHOCOLATE_BAR" },
+];
+
 export class SimulationEngine {
   private seed: number;
   private randomState: number;
@@ -76,15 +85,16 @@ export class SimulationEngine {
   private demoPhase: string | null = null;
   private stressStartedAt: number | null = null;
   private firedStressPhases = new Set<string>();
-  private readonly robotCount: number;
-  private readonly taskCount: number;
+  private robotCount: number;
+  private taskCount: number;
 
   constructor(options: EngineOptions = {}) {
     this.seed = options.seed ?? DEFAULT_SEED;
     this.randomState = this.seed;
     this.mode = options.mode ?? "distributed";
-    this.robotCount = options.robotCount ?? 10;
-    this.taskCount = options.taskCount ?? 12;
+    this.taskCount = options.taskCount ?? 6;
+    this.robotCount = options.robotCount ?? this.taskCount;
+    this.taskCount = options.taskCount ?? 6;
     this.initialize("normal");
   }
 
@@ -123,20 +133,13 @@ export class SimulationEngine {
     this.tasks = [];
 
     const starts = [
-      nodeId(0, 1),
-      nodeId(1, 0),
-      nodeId(2, 0),
-      nodeId(3, 0),
-      nodeId(4, 0),
-      nodeId(5, 1),
-      nodeId(0, 7),
-      nodeId(1, 8),
-      nodeId(4, 8),
-      nodeId(5, 7),
+      nodeId(0, 1), nodeId(1, 0), nodeId(2, 0), nodeId(3, 0), nodeId(4, 0),
+      nodeId(5, 1), nodeId(0, 7), nodeId(1, 8), nodeId(4, 8), nodeId(5, 7),
     ];
     for (let index = 0; index < this.robotCount; index += 1) {
       const id = ROBOT_IDS[index] ?? `AMR-${String(index + 1).padStart(2, "0")}`;
-      const start = starts[index % starts.length];
+      const slot = warehouse.chargingSlots.find(s => s.assignedRobotId === id);
+      const start = slot ? slot.nodeId : starts[index % starts.length];
       const startNode = nodeById(this.nodes, start);
       if (!startNode) continue;
       this.agents.push(new RobotAgent(id, start, startNode));
@@ -213,6 +216,73 @@ export class SimulationEngine {
     this.broadcast("*", "TASK_BID", { taskId: task.id, phase: "OPEN" });
     this.auctionTasks();
     return task.id;
+  }
+
+  dispatchOrderBatch(products: Array<{ id?: string; name?: string; pickup: string; sku: string }>) {
+    if (!products.length) return;
+    const count = Math.min(products.length, ROBOT_IDS.length);
+    this.robotCount = count;
+    this.taskCount = count;
+    this.tasks = [];
+    this.reservations = [];
+
+    this.agents = [];
+    for (let index = 0; index < count; index += 1) {
+    const warehouse = createWarehouse();
+      const id = ROBOT_IDS[index] ?? `AMR-${String(index + 1).padStart(2, "0")}`;
+      const slot = warehouse.chargingSlots.find((s: any) => s.assignedRobotId === id);
+      const start = slot ? slot.nodeId : `N-0-${index}`;
+      const startNode = nodeById(this.nodes, start);
+      if (!startNode) continue;
+      this.agents.push(new RobotAgent(id, start, startNode));
+      this.network.setOnline(id, true);
+    }
+    for (const agent of this.agents) {
+      const initialLease = this.reserve(
+        agent.state.currentNode,
+        agent.state.id,
+        0,
+        15,
+        1,
+      );
+      if (initialLease) agent.holdInitialNode(initialLease);
+    }
+
+    for (let i = 0; i < count; i += 1) {
+      const prod = products[i];
+      const task: WarehouseTask = {
+        id: `TASK-${this.taskSequence++}`,
+        orderId: `ORD-${String(78500 + i + 1).padStart(5, "0")}`,
+        sku: prod.sku,
+        pickup: prod.pickup,
+        destination: PACKING_NODE,
+        priority: PRIORITIES[i % PRIORITIES.length],
+        deadline: this.time + 120,
+        workload: 14 + (i % 3) * 4,
+        estimatedDistance: 35,
+        energyEstimate: 18,
+        status: "WAITING",
+        assignedRobotId: null,
+        createdAt: this.time,
+        picked: false,
+        eta: 0,
+        reassignments: 0,
+        bids: [],
+      };
+      this.tasks.push(task);
+    }
+
+    this.running = true;
+    this.lastAuctionAt = -10;
+    this.emit(
+      null,
+      "SWARM_DISPATCHED",
+      `Dynamic swarm allocated: ${count} active AMRs for ${count} food orders.`,
+      PACKING_NODE,
+      `Swarm Size = ${count} AMRs`,
+    );
+    this.auctionTasks();
+    this.updateMetrics();
   }
 
   inject(kind: string) {
@@ -373,7 +443,11 @@ export class SimulationEngine {
 
   private createTaskSet(count: number) {
     const tasks: WarehouseTask[] = [];
-    for (let index = 0; index < count; index += 1) tasks.push(this.makeTask(index));
+    const numToCreate = Math.min(count, GROCERY_FOOD_ORDERS.length);
+    for (let index = 0; index < numToCreate; index += 1) {
+      const food = GROCERY_FOOD_ORDERS[index];
+      tasks.push(this.makeTask(index, food.pickup, food.sku));
+    }
     return tasks;
   }
 
@@ -631,19 +705,20 @@ export class SimulationEngine {
     this.deadlockCycles = cycles;
     for (const cycle of cycles) {
       const cycleKey = [...cycle].sort().join(">");
-      if (this.seenDeadlockCycles.has(cycleKey)) continue;
+      const cycleAgents = cycle
+        .map((id) => this.findRobot(id))
+        .filter((agent): agent is RobotAgent => Boolean(agent));
+      const maxWait = Math.max(...cycleAgents.map((a) => a.state.waitSeconds), 0);
+      if (this.seenDeadlockCycles.has(cycleKey) && maxWait < 1.2) continue;
       this.seenDeadlockCycles.add(cycleKey);
       this.totalDeadlocks += 1;
       const ids = cycle.join(" → ");
       this.emit(null, "DEADLOCK_DETECTED", `Wait-for cycle detected: ${ids} → ${cycle[0]}.`, null, "Recovery selection started.");
-      const victimId = cycle
-        .map((id) => this.findRobot(id))
-        .filter((agent): agent is RobotAgent => Boolean(agent))
-        .sort((a, b) => a.state.taskPriority - b.state.taskPriority || b.state.id.localeCompare(a.state.id))[0]?.state.id;
-      const victim = victimId ? this.findRobot(victimId) : null;
+      const victim = cycleAgents.sort((a, b) => a.state.taskPriority - b.state.taskPriority || b.state.id.localeCompare(a.state.id))[0];
       if (!victim) continue;
-      const reason = `${victimId} releases its wait dependency; a local alternative route breaks the cycle ${ids}.`;
+      const reason = `${victim.state.id} releases its wait dependency; taking side way corridor to break cycle ${ids}.`;
       victim.recoverDeadlock(this.context(victim), reason);
+      victim.state.waitSeconds = 0;
       const remaining = this.findWaitCycles();
       if (remaining.length === 0) {
         this.deadlockCycles = [];
@@ -1196,3 +1271,4 @@ export class SimulationEngine {
     return Math.floor((this.randomState / 0x100000000) * max);
   }
 }
+

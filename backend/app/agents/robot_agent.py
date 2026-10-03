@@ -56,11 +56,12 @@ class AgentNotice:
 
 class RobotAgent:
     def __init__(self, id_str: str, starting_node: str, node: WarehouseNodeSchema):
+        initial_heading = math.pi / 2 if starting_node.startswith("N-0-") else (-math.pi / 2 if starting_node.startswith("N-5-") else 0.0)
         self.state = RobotStateSchema(
             id=id_str,
             x=node.x,
             y=node.y,
-            heading=0.0,
+            heading=initial_heading,
             velocity=0.0,
             acceleration=0.0,
             battery=84.0 + (int(id_str[-2:]) * 3) % 15,
@@ -298,15 +299,26 @@ class RobotAgent:
                 self.state.status = "IDLE"
 
         next_node = self.state.route[1] if len(self.state.route) > 1 else None
+        if next_node:
+            dest_node = node_by_id(context.nodes, next_node)
+            if dest_node and self.state.velocity == 0.0 and self.state.status not in ("WAITING", "YIELDING"):
+                self.state.heading = math.atan2(dest_node.y - self.state.y, dest_node.x - self.state.x)
         if not next_node:
             self.state.velocity = 0.0
+            home_node = self._get_home_slot()
             if self.charge_target and self.state.currentNode == self.charge_target:
                 self.state.status = "CHARGING"
                 self.state.intent = "CHARGE"
                 self.state.battery = min(100.0, self.state.battery + dt * 5.5)
                 if self.state.battery >= 88.0:
                     self._finish_charging(context)
-            elif self.state.currentTaskId and goal == self.state.currentNode:
+            elif self.state.currentNode == home_node and not self.state.currentTaskId:
+                self.state.status = "IDLE"
+                self.state.intent = "CHARGING"
+                self.state.battery = min(100.0, self.state.battery + dt * 3.5)
+                self.state.destination = None
+                self.state.reason = f"Docked at assigned charging slot {home_node}."
+            elif self.state.currentTaskId and (goal == self.state.currentNode or math.hypot(self.state.x - (node_by_id(context.nodes, goal).x if node_by_id(context.nodes, goal) else 99), self.state.y - (node_by_id(context.nodes, goal).y if node_by_id(context.nodes, goal) else 99)) < 1.25):
                 self._update_task_phase(context)
             self.state.battery = max(0.0, self.state.battery - dt * 0.004)
             return None
@@ -368,15 +380,61 @@ class RobotAgent:
                 return predicted_conflict
 
             own_priority = self._priority_score(now)
-            other_priority = peer.task_priority if peer else 0.0
+            other = peer or self.peer_states.get(peer_id)
+            other_priority = getattr(other, "taskPriority", 0.0) or getattr(other, "task_priority", 0.0) if other else 0.0
             wins = (own_priority > other_priority) or (abs(own_priority - other_priority) < 0.0001 and self.state.id < peer_id)
 
             if not wins:
+                wait_time = getattr(other, "nextEta", 0) if other else 0
                 self._wait_for(peer_id, context, "YIELD")
                 predicted_conflict.decision = f"{self.state.id} YIELDS"
                 self.state.status = "YIELDING"
                 self.state.reason = f"{peer_id} has higher right-of-way priority ({other_priority:.2f} vs {own_priority:.2f})."
                 self._send_decision(context, "YIELD", self.state.reason, predicted_conflict.resource, peer_id)
+
+                current_goal = self.state.destination or (self.state.route[-1] if self.state.route else None)
+                if current_goal and current_goal != self.state.currentNode:
+                    occupied = set()
+                    for r in context.robots:
+                        if r.id != self.state.id and r.health != "FAILED":
+                            if r.currentNode and r.currentNode != current_goal:
+                                occupied.add(r.currentNode)
+                            if r.currentWaypoint and r.currentWaypoint != current_goal:
+                                occupied.add(r.currentWaypoint)
+                    alt = plan_route(
+                        self.state.currentNode, current_goal,
+                        context.nodes, context.edges,
+                        blocked_nodes={predicted_conflict.resource},
+                        blocked_edges=self.local_blocked_edges,
+                        avoid_nodes=occupied,
+                        reservations=context.reservations,
+                        robot_id=self.state.id,
+                    )
+                    if alt and len(alt.nodes) > 1:
+                        self.state.alternativeRoute = list(alt.nodes)
+                        other_stopped = other and (getattr(other, "status", "") in ("WAITING", "YIELDING", "BLOCKED") or getattr(other, "nextEta", 0) > 1.5)
+                        if self.state.waitSeconds >= 0.5 or other_stopped or wait_time > 1.5:
+                            if self.local_reservation_id:
+                                context.release(self.local_reservation_id)
+                            self.local_reservation_id = None
+                            self.state.currentReservation = None
+                            self.state.waitingFor = None
+                            self.previous_route = list(self.state.route)
+                            self.state.route = list(alt.nodes)
+                            self.state.plannedRoute = list(alt.nodes)
+                            self.state.status = "MOVING"
+                            self.state.intent = "DETOUR"
+                            self.state.rerouteCount += 1
+                            self.state.reason = f"Sensors detected path to {predicted_conflict.resource} blocked by {peer_id}; shortest path updated to open corridor in front via {'->'.join(alt.nodes[1:3])}."
+                            self.record_decision(now, "SIDEWAY_DETOUR_TAKEN", self.state.reason)
+                            context.emit(
+                                self.state.id,
+                                "DETOUR_SELECTED",
+                                self.state.reason,
+                                predicted_conflict.resource,
+                                "Open way in front engaged.",
+                            )
+                            return predicted_conflict
                 return predicted_conflict
 
             self.state.waitingFor = None
@@ -423,10 +481,53 @@ class RobotAgent:
                     other_prio = getattr(other, "taskPriority", 0.0) or 0.0
                     wins = own_prio > other_prio or (abs(own_prio - other_prio) < 0.0001 and self.state.id < other.id)
                     if not wins:
+                        wait_time = getattr(other, "eta", 0) if other else 0
+                        if wait_time > 4.0:
+                            self.state.status = "REROUTING"
+                            self.route_goal = None
+                            self.state.reason = f"Proximity block by {other.id} would take {wait_time:.1f}s; taking side way."
+                            self._record_decision(now, "REROUTE_SELECTED", self.state.reason)
+                            break
                         self.state.status = "YIELDING"
                         self.state.velocity = 0.0
-                        self.state.reason = f"360° Proximity Sensor Alert: yielding right-of-way to higher-priority {other.id} ({dist:.2f}m)."
+                        self.state.waitingFor = other.id
+                        self.state.reason = f"360 Proximity Sensor Alert: yielding right-of-way to higher-priority {other.id} ({dist:.2f}m)."
                         break
+
+        if self.state.status in ("YIELDING", "WAITING") and len(self.state.route) > 1:
+            current_next = self.state.route[1]
+            goal = self.state.destination or self.state.route[-1]
+            if current_next and goal:
+                alt = plan_route(
+                    self.state.currentNode,
+                    goal,
+                    context.nodes,
+                    context.edges,
+                    blocked_nodes={current_next},
+                    blocked_edges=self.local_blocked_edges,
+                    reservations=context.reservations,
+                    robot_id=self.state.id,
+                )
+                if alt and len(alt.nodes) > 1:
+                    self.state.alternativeRoute = list(alt.nodes)
+                    peer = next((r for r in context.robots if r.id == self.state.waitingFor), None)
+                    peer_waiting = peer and peer.status in ("WAITING", "YIELDING", "BLOCKED")
+                    peer_eta = getattr(peer, "eta", 0) if peer else 0
+                    if self.state.waitSeconds >= 1.2 or peer_waiting or peer_eta > 2.0:
+                        if self.local_reservation_id:
+                            context.release(self.local_reservation_id)
+                        self.local_reservation_id = None
+                        self.state.currentReservation = None
+                        self.state.waitingFor = None
+                        self.previous_route = list(self.state.route)
+                        self.state.route = list(alt.nodes)
+                        self.state.plannedRoute = list(alt.nodes)
+                        self.state.status = "MOVING"
+                        self.state.intent = "DETOUR"
+                        self.state.rerouteCount += 1
+                        self.state.reason = f"Sensors detected path blocked by {peer.id if peer else 'obstacle'}; taking side way via {'->'.join(alt.nodes[1:3])}."
+                        self.record_decision(now, "SIDEWAY_DETOUR_TAKEN", self.state.reason)
+                        context.emit(self.state.id, "DETOUR_SELECTED", self.state.reason, current_next, "Alternative route engaged.")
 
         if self.state.status not in ("YIELDING", "WAITING"):
             self._advance(dt, next_node, context)
@@ -482,10 +583,10 @@ class RobotAgent:
             alternative = plan_route(
                 self.state.currentNode, goal,
                 context.nodes, context.edges,
+                blocked_nodes={current_next},
                 blocked_edges=self.local_blocked_edges,
                 reservations=context.reservations,
-                robot_id=self.state.id,
-                avoid_nodes={current_next}
+                robot_id=self.state.id
             )
             if alternative and len(alternative.nodes) > 1:
                 self.previous_route = list(self.state.route)
@@ -493,6 +594,8 @@ class RobotAgent:
                 self.state.plannedRoute = list(alternative.nodes)
                 self.state.alternativeRoute = list(alternative.nodes)
                 self.state.rerouteCount += 1
+                self.state.status = "MOVING"
+                self.state.intent = "DETOUR"
 
         self.record_decision(context.now, "DEADLOCK_RECOVERY", reason)
         context.emit(self.state.id, "DEADLOCK_RECOVERY", reason, None, "Wait-for dependency released and route replanned.")
@@ -520,7 +623,7 @@ class RobotAgent:
             self.record_decision(context.now, "PICKUP", self.state.reason)
             self._ensure_route(this_goal, context)
         # 2. COUNTER DELIVERY & PACKAGE ACCEPTANCE HANDSHAKE PHASE:
-        elif task.picked and (self.state.currentNode == task.destination or dist_to_dest < 0.85):
+        elif task.picked and (self.state.currentNode == task.destination or dist_to_dest < 1.25):
             if task.status == "COMPLETED":
                 return
             # Pack Counter Package Acceptance Handshake: ROBOT -> COUNTER
@@ -534,6 +637,13 @@ class RobotAgent:
             self.route_goal = None
             self.state.status = "DELIVERY_COMPLETED"
             self.state.reason = f"Pack Counter {task.destination} accepted {task.sku}; delivery complete."
+
+            # Immediately release counter reservation so queued robots can advance
+            if self.local_reservation_id:
+                context.release(self.local_reservation_id)
+                self.local_reservation_id = None
+            self.state.currentReservation = None
+            context.release_owned(self.state.id)
 
             context.emit(self.state.id, "COUNTER_PACKAGE_ACCEPTED", f"Pack Counter {task.destination} accepted package {task.sku} from {self.state.id}.", task.destination, task.id)
             context.emit(self.state.id, "TASK_COMPLETED", self.state.reason, task.destination, task.id)
@@ -628,23 +738,27 @@ class RobotAgent:
     def _get_counter_queue_target(self, task_dest: str, context: AgentContext) -> str:
         if task_dest != "N-2-8":
             return task_dest
-        queue_slots = ["N-2-8", "N-2-7", "N-2-6", "N-2-5"]
-        for slot in queue_slots:
-            owner = None
-            for r in context.reservations:
-                if r.resourceId == slot and r.status == "ACTIVE" and r.endTime > context.now:
-                    if r.ownerRobot != self.state.id:
-                        owner = r.ownerRobot
-                        break
-            if not owner:
-                for r in context.robots:
-                    if r.id != self.state.id and r.health != "FAILED":
-                        if r.currentNode == slot or r.currentWaypoint == slot:
-                            owner = r.id
-                            break
-            if not owner or owner == self.state.id:
+        counter_occupied = any(
+            (r.resourceId == "N-2-8" and r.status == "ACTIVE" and r.endTime > context.now and r.ownerRobot != self.state.id)
+            for r in context.reservations
+        ) or any(
+            (r.id != self.state.id and r.health != "FAILED" and (r.currentNode == "N-2-8" or r.currentWaypoint == "N-2-8"))
+            for r in context.robots
+        )
+        if not counter_occupied:
+            return "N-2-8"
+
+        for slot in ["N-2-7", "N-2-6", "N-2-5"]:
+            slot_busy = any(
+                (r.resourceId == slot and r.status == "ACTIVE" and r.endTime > context.now and r.ownerRobot != self.state.id)
+                for r in context.reservations
+            ) or any(
+                (r.id != self.state.id and r.health != "FAILED" and (r.currentNode == slot or r.currentWaypoint == slot))
+                for r in context.robots
+            )
+            if not slot_busy:
                 return slot
-        return queue_slots[-1]
+        return "N-2-7" 
 
     def _choose_goal(self, context: AgentContext) -> Optional[str]:
         if self.charge_target:
@@ -672,20 +786,44 @@ class RobotAgent:
     def _ensure_route(self, goal: str, context: AgentContext):
         next_n = self.state.route[1] if len(self.state.route) > 1 else None
         next_edge = edge_between(context.edges, self.state.currentNode, next_n) if next_n else None
+        is_next_blocked_by_robot = bool(
+            next_n and any(
+                r.id != self.state.id and r.health != "FAILED" and (r.currentNode == next_n or r.currentWaypoint == next_n)
+                for r in context.robots
+            )
+        )
         invalidated = (
             self.route_goal != goal or
             not self.state.route or
             (next_edge and (next_edge.blocked or next_edge.id in self.local_blocked_edges)) or
-            (not next_edge and self.state.currentNode != goal and bool(next_n))
+            (not next_edge and self.state.currentNode != goal and bool(next_n)) or
+            (is_next_blocked_by_robot and (self.state.status in ("WAITING", "YIELDING") or self.state.waitSeconds >= 0.5))
         )
         if not invalidated and len(self.state.route) > 1:
             return
 
         previous = list(self.state.route)
+        blocked_nodes_for_route = set()
+        if self.state.currentNode == "N-2-8":
+            blocked_nodes_for_route.add("N-2-7")  # Prevent exiting into incoming queue; force perimeter exit!
+
+        avoid_nodes_for_route = set()
+        for r in context.robots:
+            if r.id != self.state.id and r.health != "FAILED":
+                if r.currentNode and r.currentNode != goal:
+                    avoid_nodes_for_route.add(r.currentNode)
+                if r.currentWaypoint and r.currentWaypoint != goal:
+                    avoid_nodes_for_route.add(r.currentWaypoint)
+
+        if is_next_blocked_by_robot and (self.state.status in ("WAITING", "YIELDING") or self.state.waitSeconds >= 0.5):
+            blocked_nodes_for_route.add(next_n)
+
         route = plan_route(
             self.state.currentNode, goal,
             context.nodes, context.edges,
+            blocked_nodes=blocked_nodes_for_route,
             blocked_edges=self.local_blocked_edges,
+            avoid_nodes=avoid_nodes_for_route,
             reservations=context.reservations,
             robot_id=self.state.id,
             energy_weight=0.12 if self.state.battery < 35.0 else 0.04
@@ -790,17 +928,61 @@ class RobotAgent:
             for r in context.reservations
         )
         if resource_busy:
-            blocker_id = blocking_robot.id if blocking_robot else "traffic"
+            reservation_blocker = next((r.ownerRobot for r in context.reservations if r.resourceId == next_node and r.status == "ACTIVE" and r.endTime > context.now and r.ownerRobot != self.state.id), None)
+            blocker_id = blocking_robot.id if blocking_robot else (reservation_blocker or "traffic")
+            self.state.waitingFor = blocking_robot.id if blocking_robot else reservation_blocker
             self.state.status = "WAITING"
             self.state.intent = "WAITING_FOR_TRAFFIC"
             self.state.reason = f"Waiting for {next_node} (occupied by {blocker_id})."
             self.state.waitSeconds += dt
             self.state.velocity = 0.0
-            # Reserve current node so following robots queue behind us safely!
-            context.reserve(
-                self.state.currentNode, self.state.id, context.now,
-                context.now + 10.0, self._priority_score(context.now)
-            )
+
+            # SHORT-PATH FINDING: Detect open way in front!
+            current_goal = self.state.destination or (self.state.route[-1] if self.state.route else None)
+            if current_goal and current_goal != self.state.currentNode:
+                occupied = set()
+                for r in context.robots:
+                    if r.id != self.state.id and r.health != "FAILED":
+                        if r.currentNode and r.currentNode != current_goal:
+                            occupied.add(r.currentNode)
+                        if r.currentWaypoint and r.currentWaypoint != current_goal:
+                            occupied.add(r.currentWaypoint)
+                alt = plan_route(
+                    self.state.currentNode, current_goal,
+                    context.nodes, context.edges,
+                    blocked_nodes={next_node},
+                    blocked_edges=self.local_blocked_edges,
+                    avoid_nodes=occupied,
+                    reservations=context.reservations,
+                    robot_id=self.state.id,
+                )
+                if alt and len(alt.nodes) > 1:
+                    self.state.alternativeRoute = list(alt.nodes)
+                    peer = next((r for r in context.robots if r.id == (blocking_robot.id if blocking_robot else reservation_blocker)), None)
+                    peer_stopped = peer and (peer.status in ("WAITING", "YIELDING", "BLOCKED", "IDLE") or getattr(peer, "velocity", 0.0) == 0.0)
+                    if self.state.waitSeconds >= 0.5 or peer_stopped:
+                        if self.local_reservation_id:
+                            context.release(self.local_reservation_id)
+                        self.local_reservation_id = None
+                        self.state.currentReservation = None
+                        self.state.waitingFor = None
+                        self.previous_route = list(self.state.route)
+                        self.state.route = list(alt.nodes)
+                        self.state.plannedRoute = list(alt.nodes)
+                        self.state.status = "MOVING"
+                        self.state.intent = "DETOUR"
+                        self.state.rerouteCount += 1
+                        self.state.reason = f"Way to {next_node} occupied by {blocker_id}; taking open corridor in front via {'->'.join(alt.nodes[1:3])}."
+                        self.record_decision(context.now, "SIDEWAY_DETOUR_TAKEN", self.state.reason)
+                        context.emit(
+                            self.state.id,
+                            "DETOUR_SELECTED",
+                            self.state.reason,
+                            next_node,
+                            "Open corridor in front engaged.",
+                        )
+                        self._advance(dt, alt.nodes[1], context)
+                        return
             return
 
         edge_occupants = [
@@ -812,6 +994,8 @@ class RobotAgent:
         capacity_full = len(edge_occupants) >= edge.capacity
 
         if unsafe_dist or capacity_full:
+            blocker = next((r for r in edge_occupants if math.hypot(r.x - self.state.x, r.y - self.state.y) < 1.1), edge_occupants[0] if edge_occupants else None)
+            self.state.waitingFor = blocker.id if blocker else None
             self.state.status = "WAITING"
             self.state.intent = "EDGE_CLEARANCE"
             self.state.reason = f"Waiting for {edge.id} to clear."
@@ -831,6 +1015,8 @@ class RobotAgent:
                     self._priority_score(context.now)
                 )
             if not target_lease:
+                blocking_reservation = next((r for r in context.reservations if r.resourceId == next_node and r.status == "ACTIVE"), None)
+                self.state.waitingFor = blocking_reservation.ownerRobot if blocking_reservation else None
                 self.state.status = "WAITING"
                 self.state.intent = "NODE_CLEARANCE"
                 self.state.reason = f"Waiting for {next_node} to become available."
@@ -879,9 +1065,11 @@ class RobotAgent:
             self.state.route = self.state.route[1:]
             self.state.plannedRoute = list(self.state.route)
             self.state.currentWaypoint = self.state.route[1] if len(self.state.route) > 1 else None
-            if self.state.status == "RECOVERING":
+            if self.state.status == "RECOVERING" or self.state.intent == "DETOUR":
                 self.state.status = "MOVING"
-                self.state.reason = "Recovery waypoint reached; normal route resumed."
+                self.state.intent = "PROCEED"
+                self.state.reason = "Detour completed; normal shortest route resumed."
+                self.state.alternativeRoute = []
             self._update_task_phase(context)
             edge.occupancy = [rid for rid in edge.occupancy if rid != self.state.id]
         elif self.state.id not in edge.occupancy:
@@ -942,3 +1130,5 @@ class RobotAgent:
         self.state.decisionHistory.append(DecisionEntry(time=time_, action=action, reason=reason))
         if len(self.state.decisionHistory) > 30:
             self.state.decisionHistory = self.state.decisionHistory[-30:]
+
+

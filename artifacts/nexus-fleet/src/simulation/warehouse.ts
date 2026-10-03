@@ -2,10 +2,7 @@ import type { WarehouseEdge, WarehouseNode } from "./types";
 import { GLOBAL_WAREHOUSE_LAYOUT, nodeId as layoutNodeId } from "./warehouseLayout";
 
 export function createWarehouse() {
-  return {
-    nodes: GLOBAL_WAREHOUSE_LAYOUT.nodes,
-    edges: GLOBAL_WAREHOUSE_LAYOUT.edges,
-  };
+  return GLOBAL_WAREHOUSE_LAYOUT;
 }
 
 export function nodeId(row: number, col: number) {
